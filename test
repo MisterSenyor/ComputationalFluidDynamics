@@ -1,0 +1,217 @@
+.386                ; use 80386 instruction
+.model flat,stdcall ; uses flat memory addressing model % STDCALL as default calling convention
+option casemap:none
+
+include C:\masm32\include\windows.inc
+include C:\masm32\include\kernel32.inc
+include C:\masm32\include\user32.inc
+include C:\masm32\include\gdi32.inc
+include C:\masm32\include\masm32.inc
+
+includelib C:\masm32\lib\kernel32.lib   ; ExitProcess, GetCommandLineA, GetModuleHandleA
+includelib C:\masm32\lib\user32.lib     ; BeginPaint, CreateWindowExA@, DefWindowProcA, DispatchMessageA, EndPaint, GetMessageA, InvalidateRect, LoadCursorA, LoadIconA, PostQuitMessage, RegisterClassExA, SetWindowTextA, ShowWindow, TranslateMessage, UpdateWindow
+includelib C:\masm32\lib\gdi32.lib      ; CreatePen, LineTo, MoveToEx, SelectObject
+includelib C:\masm32\lib\masm32.lib     ; dwtoa
+
+.CONST
+DRAWING equ 1
+WAITING equ 0
+
+.DATA
+    ClassName db 'SimpleWinClass',0
+    AppName db 'Paint',0
+
+    labelDrawing db 'Drawing...',0
+    labelWaiting db 'Waiting.',0
+
+    StaticClassName db 'static',0
+    X dw 'x',0
+    Y dw 'y',0
+
+    state db WAITING
+
+.DATA?
+    hInstance HINSTANCE ?
+    CommandLine LPSTR ?
+    hitpoint POINT <>
+    lastpoint POINT <>
+
+    wc WNDCLASSEX <?>
+    msg MSG <?> ; handle message
+    hwnd HWND ? ; handle window procedure
+
+    hwndX HWND ?
+    hwndY HWND ?
+    hwndState HWND ?
+
+    hdc HDC ?
+    ps PAINTSTRUCT <?>
+
+    hPen HPEN ?
+
+.CODE
+
+updateXY PROC lParam:LPARAM
+    movzx eax, WORD PTR lParam
+    mov hitpoint.x, eax
+
+    invoke dwtoa, eax, offset X
+    invoke SetWindowText, hwndX, offset X
+
+    mov eax, lParam
+    shr eax, 16
+    mov hitpoint.y, eax
+
+    invoke dwtoa, eax, offset Y
+    invoke SetWindowText, hwndY, offset Y
+    ret
+updateXY ENDP
+
+; https://msdn.microsoft.com/library/windows/desktop/ms633573.aspx
+WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
+
+    cmp uMsg, WM_MOUSEMOVE
+    je ON_WM_MOUSEMOVE
+
+    cmp uMsg, WM_PAINT
+    je ON_WM_PAINT
+
+    cmp uMsg, WM_CREATE
+    je ON_WM_CREATE
+
+    cmp uMsg, WM_LBUTTONDOWN
+    je ON_WM_LBUTTONDOWN
+
+    cmp uMsg, WM_LBUTTONUP
+    je ON_WM_LBUTTONUP
+
+    cmp uMsg, WM_DESTROY
+    je ON_WM_DESTROY
+
+    jmp ON_DEFAULT
+
+    ON_WM_DESTROY:              ; User closes program
+        invoke PostQuitMessage, NULL
+        jmp EXIT
+
+    ON_WM_CREATE:
+        ; Create windows for text
+        invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset X, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 20, 20, 50, 25, hWnd, 1, hInstance, NULL
+        mov hwndX, eax
+        invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset Y, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 90, 20, 50, 25, hWnd, 1, hInstance, NULL
+        mov hwndY, eax
+        invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset labelWaiting, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 20, 60, 80, 23, hWnd, 1, hInstance, NULL
+        mov hwndState, eax
+
+        ; Create pen for LineTo
+        invoke CreatePen, PS_SOLID, 10, 00dbd9d9h
+        mov hPen, eax
+
+        jmp EXIT
+
+    ON_WM_LBUTTONDOWN:
+
+        ; last mouse position = current mouse position
+        mov eax, hitpoint.x
+        mov lastpoint.x, eax
+        mov eax, hitpoint.y
+        mov lastpoint.y, eax
+
+        mov [state], DRAWING
+        invoke SetWindowText, hwndState, offset labelDrawing
+        jmp EXIT
+
+    ON_WM_LBUTTONUP:
+        mov [state], WAITING
+        invoke SetWindowText, hwndState, offset labelWaiting
+        jmp EXIT
+
+    ON_WM_MOUSEMOVE:
+        invoke updateXY, lParam                     ; PROC above
+
+        cmp [state], DRAWING
+        jne EXIT
+
+        invoke InvalidateRect, hWnd, NULL, FALSE    ; https://msdn.microsoft.com/library/dd145002.aspx
+        jmp EXIT
+
+    ON_WM_PAINT:
+        invoke BeginPaint, hWnd, offset ps
+        invoke MoveToEx, ps.hdc, lastpoint.x, lastpoint.y, NULL
+        invoke SelectObject, ps.hdc, hPen;
+        invoke LineTo, ps.hdc, hitpoint.x, hitpoint.y
+        mov eax, hitpoint.x             ; last mouse position = current mouse position
+        mov lastpoint.x, eax
+        mov eax, hitpoint.y
+        mov lastpoint.y, eax
+        invoke EndPaint, hWnd, offset ps
+        jmp EXIT
+
+    ON_DEFAULT:     ; handle any message that program don't handle
+        invoke DefWindowProc, hWnd, uMsg, wParam, lParam    ; https://msdn.microsoft.com/library/windows/desktop/ms633572.aspx
+        jmp EXIT
+
+    EXIT:
+        ret
+WndProc ENDP
+
+WinMain PROC hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
+
+    ; WNDCLASSEX structure in MSDN, declaration in windows.inc
+    ; https://msdn.microsoft.com/library/windows/desktop/ms633577.aspx
+    invoke LoadIcon, NULL, IDI_APPLICATION  ; Load default icon
+    mov wc.hIcon, eax
+    mov wc.hIconSm, eax
+    invoke LoadCursor, NULL, IDC_ARROW      ; Load default cursor
+    mov wc.hCursor, eax
+
+    mov wc.cbSize, SIZEOF WNDCLASSEX        ; size of this structure
+    mov wc.style, CS_HREDRAW or CS_VREDRAW  ; style of windows https://msdn.microsoft.com/library/windows/desktop/ff729176.aspx
+    mov wc.lpfnWndProc, OFFSET WndProc      ; andress of window procedure
+    mov wc.cbClsExtra, NULL
+    mov wc.cbWndExtra, NULL
+    push hInstance
+    pop wc.hInstance
+    mov wc.hbrBackground,COLOR_WINDOW+1     ; background color, require to add 1
+    mov wc.lpszMenuName, NULL
+    mov wc.lpszClassName, OFFSET ClassName
+
+    invoke RegisterClassEx, offset wc       ; https://msdn.microsoft.com/library/windows/desktop/ms633587.aspx
+
+    ; https://msdn.microsoft.com/library/windows/desktop/ms632680.aspx
+    invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset ClassName, offset AppName, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 600, 600, NULL, NULL, hInstance, NULL
+    mov hwnd, eax                       ; Store windows handle
+    invoke ShowWindow, hwnd, CmdShow    ; https://msdn.microsoft.com/library/windows/desktop/ms633548.aspx
+    invoke UpdateWindow, hwnd           ; https://msdn.microsoft.com/library/windows/desktop/dd145167.aspx
+
+    ; Message Loop
+    MESSAGE_LOOP:                       ; https://msdn.microsoft.com/library/windows/desktop/ms644936.aspx
+
+        invoke GetMessage, offset msg, NULL, 0, 0
+        test eax, eax
+        jle END_LOOP
+
+        invoke TranslateMessage, offset msg
+        invoke DispatchMessage, offset msg
+
+        jmp MESSAGE_LOOP
+
+    END_LOOP:
+    mov eax, msg.wParam
+    ret
+WinMain ENDP
+
+main PROC
+
+    invoke GetModuleHandle, NULL    ; https://msdn.microsoft.com/library/windows/desktop/ms683199.aspx
+    mov hInstance, eax              ; return an instance to handle in eax
+
+    invoke GetCommandLine           ; https://msdn.microsoft.com/library/windows/desktop/ms683156.aspx
+    mov CommandLine, eax            ; return a pointer to the command-line for current process
+
+    invoke WinMain, hInstance, NULL, CommandLine, SW_SHOW
+
+    invoke ExitProcess, eax
+main ENDP
+
+END main
