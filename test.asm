@@ -7,7 +7,7 @@ visc real4 ?
 N dd 64
 
 s real4 64*64 dup(0.0)
-density real4 64*64 dup(100.0)
+density real4 64*64 dup(0.0)
 densityZ real4 64*64 dup(1.0)
 
 Vx real4 64*64 dup(0.0)
@@ -57,10 +57,10 @@ WAITING equ 0
     bcolor COLORREF 00111111h
     tempColor COLORREF 0
 
-    cube FluidCube <0.0, 0.05, 0.0>
+    cube FluidCube <0.0, 0.2, 0.00000001>
     ThreeBytes db 10h,20h,30h
-    real2 real4 20.0
-    realTest real4 1.0
+    real2 real4 10.0
+    realTest real4 0.5
 
     consoleOutHandle dd ? 
     bytesWritten dd ? 
@@ -162,29 +162,24 @@ addDensity proc cube_density:dword, N:dword, x:dword, y:dword, amount:real4
     pop ebx
     add ebx, cube_density
 
-    mov eax, 255
-    push eax
-    fstp st(0)
-    fild dword ptr [esp]
-    fst real4 ptr [esp]
-
     mov eax, amount
     fstp st(0)
     fld real4 ptr [ebx] ; loading the original value that we need to add to
     push eax
     fadd real4 ptr [esp]
-    pop eax
-    fcom real4 ptr [esp] ; comparing final value to 255
+
+    mov eax, 254
+    push eax
+    ficom real4 ptr [esp]
     fstsw ax          ;copy the Status Word containing the result to AX
     fwait             ;insure the previous instruction is completed
     sahf              ;transfer the condition codes to the CPU's flag register
-    jb notLarger
-    jz notLarger
-    fstp st(0)
-    fld real4 ptr [esp] ; capping the value to 255
-    notLarger:
+    ja skipAdd
+    fst real4 ptr [esp] ; pushing eax and storing the added value in the stack as to save it later
+    mov eax, real4 ptr [esp]
+    mov real4 ptr [ebx], eax ; storing the new value inside the addr
+    skipAdd:
 
-    fst real4 ptr [ebx] ; storing the new value inside the addr
 
     pop eax ; popping to preserve stack
 
@@ -271,7 +266,7 @@ diffuse proc
     ; also do some more calcs on a (and push them)
     push eax ; redundancy push to save the a val inside
     fst real4 ptr [esp] ; a
-    mov eax, 6
+    mov eax, 4
     push eax
     fimul dword ptr [esp]
     pop eax
@@ -280,7 +275,7 @@ diffuse proc
     fiadd dword ptr [esp]
     pop eax
     push eax ; redundancy push to save the c val inside
-    fst real4 ptr [esp] ; a * 6 + 1 (c val)
+    fst real4 ptr [esp] ; a * 4 + 1 (c val)
     mov eax, [ebp + 32] ; N
     push eax
     mov eax, [ebp + 28]; iter
@@ -448,8 +443,14 @@ project proc
 
     mov ebx, 1
     push ebx ; a value
+    fstp st(0)
+    fild dword ptr [esp]
+    fst real4 ptr [esp]
     mov ebx, 6
     push ebx ; c value
+    fstp st(0)
+    fild dword ptr [esp]
+    fst real4 ptr [esp]
     mov ebx, dword ptr [ebp + 28]
     push ebx ; N
     mov ebx, [ebp + 24]
@@ -693,7 +694,7 @@ advect proc
             fstsw ax          ;copy the Status Word containing the result to AX
             fwait             ;insure the previous instruction is completed
             sahf              ;transfer the condition codes to the CPU's flag register
-            ja xGreaterThan0_5
+            jb xGreaterThan0_5
             jz xIs0_5
             fst real4 ptr [esp + 12] ; if x < 0.5 => x = 0.5
             xGreaterThan0_5:
@@ -710,7 +711,7 @@ advect proc
             fstsw ax          ;copy the Status Word containing the result to AX
             fwait             ;insure the previous instruction is completed
             sahf              ;transfer the condition codes to the CPU's flag register
-            jb xLessThanNMinus2Plus0_5
+            ja xLessThanNMinus2Plus0_5
             jz xIsNMinus2Plus0_5
             fst real4 ptr [esp + 12] ; if x > N - 2 + 0.5 => x = N - 2 + 0.5
 
@@ -760,7 +761,7 @@ advect proc
             fstsw ax          ;copy the Status Word containing the result to AX
             fwait             ;insure the previous instruction is completed
             sahf              ;transfer the condition codes to the CPU's flag register
-            ja yGreaterThan0_5
+            jb yGreaterThan0_5
             jz yIs0_5
             fst real4 ptr [esp + 4] ; if x < 0.5 => x = 0.5
             yGreaterThan0_5:
@@ -777,7 +778,7 @@ advect proc
             fstsw ax          ;copy the Status Word containing the result to AX
             fwait             ;insure the previous instruction is completed
             sahf              ;transfer the condition codes to the CPU's flag register
-            jb yLessThanNMinus2Plus0_5
+            ja yLessThanNMinus2Plus0_5
             jz yIsNMinus2Plus0_5
             fst real4 ptr [esp + 4] ; if x > N - 2 + 0.5 => x = N - 2 + 0.5
 
@@ -959,7 +960,7 @@ advect proc
         cmp ecx, eax
     jb firstLoop
 
-    mov ebx, dword ptr [ebp + 32]
+                                                                                                                            mov ebx, dword ptr [ebp + 32]
     push ebx ; N
     mov ebx, dword ptr [ebp + 12]
     push ebx ; d
@@ -1454,23 +1455,14 @@ linSolve proc
                 add ebx, [ebp + 16] ; positioning location within vel0 arr
                 fadd real4 ptr [ebx] ; getting the vel0 x, y val that is inside the arr
 
-                push eax
-                push eax ; pushing eax twice to save st(0) in the stack but also save eax's value
-                fst real4 ptr [esp]
-
-                fstp st(0) ; resetting st(0)
-
-                mov ebx, 1
-                push ebx
-                fild dword ptr [esp]
-                pop ebx
-                fdiv real4 ptr [ebp + 28] ; loading 1/c in st(0)
+                ;mov ebx, 1
+                ;push ebx
+                ;fild dword ptr [esp]
+                ;pop ebx
                 ; TODO - save 1/c elsewhere. There is no need to do this step and it is inefficient.
 
-                fmul real4 ptr [esp] ; getting the previous st(0) value and multipying by it
+                fdiv real4 ptr [ebp + 28] ; getting the previous st(0) value and multipying by it
 
-                pop eax ; popping since we don't need that value 
-                pop eax ; getting eax's real value back
 
                 push eax
                 push edx ; y val
@@ -1479,8 +1471,10 @@ linSolve proc
                 pop ebx
                 add ebx, [ebp + 12] ; positioning location x, y within vel arr
                 
-                fst real4 ptr [ebx] ; saving the final value in x, y inside vel arr
 
+                fst real4 ptr [ebx] ; saving the final value in x, y inside vel arr
+                fstp st(0)
+                fld real4 ptr [ebx]
 
                 pop eax
                 pop ebx
@@ -1569,7 +1563,7 @@ fluidStep proc
     push eax
     mov eax, [ebp + 24] ; Vx
     push eax
-    mov eax, [ebp + 36] ; Vy0 
+    mov eax, [ebp + 36] ; Vy0
     push eax
     mov eax, [ebp + 32] ; Vx0
     push eax
@@ -1820,6 +1814,19 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 
     ON_WM_CREATE:
         ; Create windows for text
+        finit
+        
+        push ebx
+        fstcw word ptr [esp]
+        fwait
+        mov bx, word ptr [esp]
+        and bx, 1111110011111111b
+        or bx,  0001000000000000b
+        mov word ptr [esp], bx
+        fldcw word ptr [esp]
+        fwait
+        pop ebx ; setting the control word to have the rounding set to round down
+
         invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset X, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 20, 20, 50, 25, hWnd, 1, hInstance, NULL
         mov hwndX, eax
         invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset Y, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 90, 20, 50, 25, hWnd, 1, hInstance, NULL
@@ -1845,13 +1852,6 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         mov eax, hitpoint.y
         mov lastpoint.y, eax
 
-        invoke addDensity, offset [cube].density, [cube].N, 0, 0, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 20, 20, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 21, 20, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 19, 20, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 20, 21, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
-        ;invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
 
         mov [state], DRAWING
         invoke SetWindowText, hwndState, offset labelDrawing
@@ -1886,25 +1886,6 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         ; div ecx
         ; cmp edx, 0
         ; jne EXIT ; fps cap
-
-        push offset [cube].density
-        push offset [cube].s
-        push offset [cube].Vy0
-        push offset [cube].Vx0
-        push offset [cube].Vy
-        push offset [cube].Vx
-        push offset [cube].deltat
-        push offset [cube].diff
-        push offset [cube].visc
-        push offset [cube].N
-        call fluidStep
-        
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
-        invoke addDensity, offset [cube].density, [cube].N, 0, 0, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 1, 1, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 2, 2, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 10, 10, real4 ptr [real2]
-
         push [cube].N
         push 0
         push 0
@@ -1917,6 +1898,37 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         fist dword ptr [esp]
         pop ebx
         invoke printToConsole, ebx
+
+        ; invoke addDensity, offset [cube].density, [cube].N, 0, 0, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 20, 20, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 21, 20, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 19, 20, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 20, 21, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
+        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
+        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 21, 20, real4 ptr [realTest], real4 ptr [realTest]
+        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 19, 20, real4 ptr [realTest], real4 ptr [realTest]
+        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 21, real4 ptr [realTest], real4 ptr [realTest]
+        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 19, real4 ptr [realTest], real4 ptr [realTest]
+        push offset [cube].density
+        push offset [cube].s
+        push offset [cube].Vy0
+        push offset [cube].Vx0
+        push offset [cube].Vy
+        push offset [cube].Vx
+        push offset [cube].deltat
+        push offset [cube].diff
+        push offset [cube].visc
+        push offset [cube].N
+        call fluidStep
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addDensity, offset [cube].density, [cube].N, 0, 0, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 1, 1, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 2, 2, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 10, 10, real4 ptr [real2]
+        
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
+
 
 
 
@@ -2042,6 +2054,9 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
                 fstp st(0)
                 fld real4 ptr [ebx]
                 push ebx
+                fst real4 ptr [esp]
+                pop eax
+                push eax
                 fist dword ptr [esp]
                 pop ebx
                 mov eax, 0
