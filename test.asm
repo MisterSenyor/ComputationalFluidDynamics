@@ -57,15 +57,19 @@ WAITING equ 0
     bcolor COLORREF 00111111h
     tempColor COLORREF 0
 
-    cube FluidCube <0.0, 0.2, 0.00000001>
+    cube FluidCube <0.0, 0.2, 0.000000000001>
     ThreeBytes db 10h,20h,30h
-    real2 real4 10.0
-    realTest real4 0.5
+    real2 real4 150.0
+    realTest real4 0.7
+    realTest2 real4 -0.5
+    realTest3 real4 0.0
 
     consoleOutHandle dd ? 
     bytesWritten dd ? 
     message db "Hello World",13,10
     lmessage dd 13
+    gridLengthX dd ?
+    gridLengthY dd ?
 
 
 .DATA?
@@ -1670,15 +1674,15 @@ updateXY PROC lParam:LPARAM
     movzx eax, WORD PTR lParam
     mov hitpoint.x, eax
 
-    ; invoke dwtoa, eax, offset X
-    ; invoke SetWindowText, hwndX, offset X
+    invoke dwtoa, eax, offset X
+    invoke SetWindowText, hwndX, offset X
 
     mov eax, lParam
     shr eax, 16
     mov hitpoint.y, eax
 
-    ; invoke dwtoa, eax, offset Y
-    ; invoke SetWindowText, hwndY, offset Y
+    invoke dwtoa, eax, offset Y
+    invoke SetWindowText, hwndY, offset Y
     ret
 updateXY ENDP
 
@@ -1840,21 +1844,41 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         invoke CreateSolidBrush, 00EEEEEEh
         mov hbr, eax
 
-        invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
 
         jmp EXIT
 
     ON_WM_LBUTTONDOWN:
 
         ; last mouse position = current mouse position
-        mov eax, hitpoint.x
-        mov lastpoint.x, eax
-        mov eax, hitpoint.y
-        mov lastpoint.y, eax
+        ; mov eax, hitpoint.x
+        ; mov lastpoint.x, eax
+        ; mov eax, hitpoint.y
+        ; mov lastpoint.y, eax
 
 
         mov [state], DRAWING
         invoke SetWindowText, hwndState, offset labelDrawing
+
+
+        invoke addDensity, offset [cube].density, [cube].N, 20, 20, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 21, 20, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 19, 20, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 20, 21, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 35, 43, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 12, 1, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 8, 9, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, 60, 10, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 20, , real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
+        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 19, 20, real4 ptr [realTest], real4 ptr [realTest]
+        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 21, real4 ptr [realTest], real4 ptr [realTest]
+        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 19, real4 ptr [realTest], real4 ptr [realTest]
+        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 21, 20, real4 ptr [realTest], real4 ptr [realTest]
+
+
         jmp EXIT
 
     ON_WM_LBUTTONUP:
@@ -1869,6 +1893,46 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         cmp [state], DRAWING
         ; invoke InvalidateRect, hWnd, NULL, FALSE    ; https://msdn.microsoft.com/library/dd145002.aspx
         jne EXIT
+        mov eax, hitpoint.x
+        mov ebx, [cube].N
+        push edx
+        mov edx, 0
+        div ebx
+        mov ecx, eax ; x in grid
+        mov eax, hitpoint.y
+        mov edx, 0
+        div ebx
+        mov ebx, eax ; y in grid
+        pop edx
+        ; invoke addDensity, offset [cube].density, [cube].N, ecx, ebx, real4 ptr [real2]
+        ; push ecx
+        ; push ebx
+        ; sub ecx, lastpoint.x
+        ; sub ebx, lastpoint.y
+
+        ; ; push ecx
+        ; ; fstp st(0)
+        ; ; fild dword ptr [esp]
+        ; ; fst real4 ptr [realTest]
+        ; ; pop ecx
+
+        ; ; push ebx
+        ; ; fstp st(0)
+        ; ; ; mov dword ptr [esp], 1
+        ; ; fild dword ptr [esp]
+        ; ; ; mov dword ptr [esp], ebx
+        
+        ; ; fst real4 ptr [realTest2]
+        ; ; pop ebx
+
+        ; pop ebx
+        ; pop ecx
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, ecx, ebx, real4 ptr [realTest], real4 ptr [realTest2]
+
+        mov eax, hitpoint.x
+        mov lastpoint.x, eax
+        mov eax, hitpoint.y
+        mov lastpoint.y, eax
 
         jmp EXIT
     
@@ -1879,13 +1943,16 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 
     ON_WM_PAINT:
         invoke GetSystemTime, addr systime
-        ; mov edx, 0
-        ; mov eax, 0
-        ; mov ax, [systime].wMilliseconds
-        ; mov ecx, 33
-        ; div ecx
-        ; cmp edx, 0
-        ; jne EXIT ; fps cap
+        mov edx, 0
+        mov eax, 0
+        mov ax, [systime].wMilliseconds
+        mov ecx, 33
+        div ecx
+        cmp edx, 0
+        jne EXIT ; fps cap
+
+
+
         push [cube].N
         push 0
         push 0
@@ -1900,16 +1967,36 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         invoke printToConsole, ebx
 
         ; invoke addDensity, offset [cube].density, [cube].N, 0, 0, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 20, 20, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 21, 20, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 19, 20, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 20, 21, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
-        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
-        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 21, 20, real4 ptr [realTest], real4 ptr [realTest]
-        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 19, 20, real4 ptr [realTest], real4 ptr [realTest]
-        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 21, real4 ptr [realTest], real4 ptr [realTest]
-        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 19, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addDensity, offset [cube].density, [cube].N, 20, 20, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 21, 20, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 19, 20, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 20, 21, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 19, 20, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 21, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 19, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 21, 20, real4 ptr [realTest], real4 ptr [realTest]
+
+
+
+
+        ; invoke addDensity, offset [cube].density, [cube].N, 20, 20, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 21, 20, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 19, 20, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 20, 21, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 35, 43, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 12, 1, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 8, 9, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 60, 10, real4 ptr [real2]
+        ; ; invoke addDensity, offset [cube].density, [cube].N, 20, , real4 ptr [real2]
+        ; ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
+        ; ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 19, 20, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 21, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 19, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 21, 20, real4 ptr [realTest], real4 ptr [realTest]
         push offset [cube].density
         push offset [cube].s
         push offset [cube].Vy0
