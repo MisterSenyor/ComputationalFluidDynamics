@@ -2090,39 +2090,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         push ebx
         fist dword ptr [esp]
         pop ebx
-        ; invoke printToConsole, ebx
 
-        ; invoke addDensity, offset [cube].density, [cube].N, 0, 0, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 20, 20, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 21, 20, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 19, 20, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 20, 21, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 19, 20, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 21, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 19, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 21, 20, real4 ptr [realTest], real4 ptr [realTest]
-
-
-
-
-        ; invoke addDensity, offset [cube].density, [cube].N, 20, 20, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 21, 20, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 19, 20, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 20, 21, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 35, 43, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 12, 1, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 8, 9, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 60, 10, real4 ptr [real2]
-        ; ; invoke addDensity, offset [cube].density, [cube].N, 20, , real4 ptr [real2]
-        ; ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
-        ; ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 19, 20, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 21, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 19, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 21, 20, real4 ptr [realTest], real4 ptr [realTest]
         push offset [cube].density
         push offset [cube].s
         push offset [cube].Vy0
@@ -2133,19 +2101,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         push offset [cube].diff
         push offset [cube].visc
         push offset [cube].N
-        call fluidStep
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addDensity, offset [cube].density, [cube].N, 0, 0, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 1, 1, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 2, 2, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 10, 10, real4 ptr [real2]
-        
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
-
-
-
-
-        ; call gradient
+        call fluidStep ; calling fluidStep to move the fluid
 
         mov eax, 0
         mov ax, [systime].wSecond
@@ -2153,7 +2109,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         je skipResetFps
         mov ax, word ptr [fps]
         invoke dwtoa, eax, offset Y
-        mov ax, [systime].wSecond
+        mov ax, [systime].wSecond ; getting systime to get fps
 
         mov word ptr [fps], 0
         skipResetFps:
@@ -2164,9 +2120,9 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         mov eax, hitpoint.x             ; last mouse position = current mouse position
         mov lastpoint.x, eax
         mov eax, hitpoint.y
-        mov lastpoint.y, eax
+        mov lastpoint.y, eax ; updating y val in box
 
-        invoke BeginPaint, hWnd, offset ps
+        invoke BeginPaint, hWnd, offset ps ; beginning paint to draw
         invoke GetClientRect, hWnd, addr screen
         mov eax, [screen].right
         mov ebx, [cube].N
@@ -2179,7 +2135,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         mov edx, 0
         div ecx ; screen height / N in eax
         mov dword ptr [gridLengthY], eax
-        mov ecx, [cube].N
+        mov ecx, [cube].N ; getting the screen size and saving the length of the grid (for later calcs)
 
         xGridLoop:
             dec ecx
@@ -2409,6 +2365,9 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         mov byte ptr [moved], 0
         mov ecx, [cube].N ; loop counter
 
+
+        ; THIS PART MAKES THE GRID -----------------------------------------
+        
         ; gridLoop:
         ;     push eax
         ;     push ebx
