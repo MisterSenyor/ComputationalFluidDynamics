@@ -57,19 +57,26 @@ WAITING equ 0
     bcolor COLORREF 00111111h
     tempColor COLORREF 0
 
-    cube FluidCube <0.0, 0.2, 0.000000000001>
+    cube FluidCube <0.0, 0.2, 0.0001>
     ThreeBytes db 10h,20h,30h
     real2 real4 150.0
     realTest real4 0.7
     realTest2 real4 -0.5
-    realTest3 real4 0.0
+    realTest3 real4 0.1
 
     consoleOutHandle dd ? 
     bytesWritten dd ? 
     message db "Hello World",13,10
     lmessage dd 13
-    gridLengthX dd ?
-    gridLengthY dd ?
+    gridLengthX dd 1
+    gridLengthY dd 1
+
+    bPercentage dd 255
+    gPercentage dd 0
+    rPercentage dd 0
+
+    colorCounter dd 0
+    repCounter dd 1
 
 
 .DATA?
@@ -964,7 +971,7 @@ advect proc
         cmp ecx, eax
     jb firstLoop
 
-                                                                                                                            mov ebx, dword ptr [ebp + 32]
+    mov ebx, dword ptr [ebp + 32]
     push ebx ; N
     mov ebx, dword ptr [ebp + 12]
     push ebx ; d
@@ -1669,7 +1676,6 @@ fputest proc
     ret
 fputest endp
 
-
 updateXY PROC lParam:LPARAM
     movzx eax, WORD PTR lParam
     mov hitpoint.x, eax
@@ -1810,7 +1816,34 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
     cmp uMsg, WM_DESTROY
     je ON_WM_DESTROY
 
+    cmp uMsg, WM_KEYDOWN
+    je ON_WM_KEYDOWN
+
     jmp ON_DEFAULT
+
+    ON_WM_KEYDOWN:
+        ; mov eax, 0
+        ; mov ah, 1
+        ; int 16h
+        ; invoke printToConsole, eax
+        fstp st(0)
+        fld real4 ptr [bPercentage]
+        fadd real4 ptr [realTest3]
+        mov eax, 1
+        push eax
+        ficom dword ptr [esp] ; comparing to x val
+        fstsw ax          ;copy the Status Word containing the result to AX
+        fwait             ;insure the previous instruction is completed
+        sahf              ;transfer the condition codes to the CPU's flag register
+        ja resetPercentage
+        fstp st(0)
+        mov dword ptr [esp], 0
+        fild dword ptr [esp]
+        resetPercentage:
+        pop eax
+        fst real4 ptr [bPercentage]
+        
+        jmp EXIT
 
     ON_WM_DESTROY:              ; User closes program
         invoke PostQuitMessage, NULL
@@ -1861,22 +1894,22 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         invoke SetWindowText, hwndState, offset labelDrawing
 
 
-        invoke addDensity, offset [cube].density, [cube].N, 20, 20, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 21, 20, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 19, 20, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 20, 21, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 35, 43, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 12, 1, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 8, 9, real4 ptr [real2]
-        invoke addDensity, offset [cube].density, [cube].N, 60, 10, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 20, , real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 20, 20, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 21, 20, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 19, 20, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 20, 21, real4 ptr [real2]
         ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
-        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 19, 20, real4 ptr [realTest], real4 ptr [realTest]
-        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 21, real4 ptr [realTest], real4 ptr [realTest]
-        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 19, real4 ptr [realTest], real4 ptr [realTest]
-        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 21, 20, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addDensity, offset [cube].density, [cube].N, 35, 43, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 12, 1, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 8, 9, real4 ptr [real2]
+        ; invoke addDensity, offset [cube].density, [cube].N, 60, 10, real4 ptr [real2]
+        ; ; invoke addDensity, offset [cube].density, [cube].N, 20, , real4 ptr [real2]
+        ; ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
+        ; ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 19, 20, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 21, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 19, real4 ptr [realTest], real4 ptr [realTest]
+        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 21, 20, real4 ptr [realTest], real4 ptr [realTest]
 
 
         jmp EXIT
@@ -1894,40 +1927,84 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         ; invoke InvalidateRect, hWnd, NULL, FALSE    ; https://msdn.microsoft.com/library/dd145002.aspx
         jne EXIT
         mov eax, hitpoint.x
-        mov ebx, [cube].N
+        mov ebx, dword ptr [gridLengthX]
         push edx
         mov edx, 0
         div ebx
         mov ecx, eax ; x in grid
         mov eax, hitpoint.y
+        mov ebx, dword ptr [gridLengthY]
         mov edx, 0
         div ebx
         mov ebx, eax ; y in grid
         pop edx
-        ; invoke addDensity, offset [cube].density, [cube].N, ecx, ebx, real4 ptr [real2]
-        ; push ecx
-        ; push ebx
-        ; sub ecx, lastpoint.x
-        ; sub ebx, lastpoint.y
 
-        ; ; push ecx
-        ; ; fstp st(0)
-        ; ; fild dword ptr [esp]
-        ; ; fst real4 ptr [realTest]
-        ; ; pop ecx
+        invoke addDensity, offset [cube].density, [cube].N, ebx, ecx, real4 ptr [real2]
 
-        ; ; push ebx
-        ; ; fstp st(0)
-        ; ; ; mov dword ptr [esp], 1
-        ; ; fild dword ptr [esp]
-        ; ; ; mov dword ptr [esp], ebx
+        push ecx
+        push ebx
+
+        push eax
+        push ebx
+
+        mov eax, lastpoint.x
+        mov ebx, dword ptr [gridLengthX]
+        push edx
+        mov edx, 0
+        div ebx
+        pop edx
+        sub ecx, eax
+        pop ebx
+        push ecx
         
-        ; ; fst real4 ptr [realTest2]
-        ; ; pop ebx
+        mov eax, lastpoint.y
+        mov ecx, dword ptr [gridLengthY]
+        push edx
+        mov edx, 0
+        div ecx
+        pop edx
+        sub ebx, eax
+        pop ebx
 
-        ; pop ebx
-        ; pop ecx
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, ecx, ebx, real4 ptr [realTest], real4 ptr [realTest2]
+        pop eax ; popping to reset the stack
+
+        ; cmp ecx, 1
+        ; jbe skip1c
+        ; mov ecx, 1
+        ; skip1c:
+        ; cmp ecx, -1
+        ; jae skip_1c
+        ; mov ecx, -1
+        ; skip_1c:
+
+        push ecx
+        fstp st(0)
+        fild dword ptr [esp]
+        fst real4 ptr [realTest2]
+        pop ecx
+
+        ; cmp ebx, 1
+        ; jbe skip1
+        ; mov ebx, 1
+        ; skip1:
+        ; invoke printToConsole, ebx
+        ; cmp ebx, -1
+        ; jae skip_1
+        ; mov ebx, -1
+        ; skip_1:
+
+        push ebx
+        fstp st(0)
+        fild dword ptr [esp]
+        fst real4 ptr [realTest]
+        pop ebx
+
+
+        pop ebx
+        pop ecx
+
+        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, ebx, ecx, real4 ptr [realTest], real4 ptr [realTest2]
+
 
         mov eax, hitpoint.x
         mov lastpoint.x, eax
@@ -1942,6 +2019,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         jmp EXIT
 
     ON_WM_PAINT:
+
         invoke GetSystemTime, addr systime
         mov edx, 0
         mov eax, 0
@@ -1952,6 +2030,54 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         jne EXIT ; fps cap
 
 
+        ; making smooth RGB
+        inc dword ptr [colorCounter]
+        cmp dword ptr [colorCounter], 1FFh ; colorCounter goes from 0 - 510 and will get the smooth rgb transition
+        jbe resetColorCounter
+
+        mov dword ptr [colorCounter], 0
+        inc dword ptr [repCounter]
+        cmp dword ptr [repCounter], 3 ; repCounter goes from 0 - 2 and goes up whenever colorCounter finishes its loop
+        jb resetColorCounter
+        
+        mov dword ptr [repCounter], 0 ; if it's >= 3 then set it to 0
+
+        resetColorCounter:
+
+        mov eax, dword ptr [repCounter]
+        mov ebx, 4
+        mov edx, 0
+        mul ebx
+        mov ebx, offset bPercentage
+        add ebx, eax ; ebx is pointing to bPercentage + repCounter (repCounter is multiplied by 4 since we're in 32-bit memory)
+
+        inc dword ptr [ebx]
+        cmp dword ptr [ebx], 0FFh ; checking if the location ebx is pointing to is 255
+        jbe skipResetPercentage
+
+        mov dword ptr [ebx], 0FFh
+        mov eax, dword ptr [repCounter]
+        cmp eax, 0
+        ja skipResetRepCounter
+        mov eax, 3
+        skipResetRepCounter:
+        dec eax
+    
+        mov ebx, 4
+        mov edx, 0
+        mul ebx
+        mov ebx, offset bPercentage
+        add ebx, eax ; ebx is pointing to bPercentage + repCounter (repCounter is multiplied by 4 since we're in 32-bit memory)
+
+        cmp dword ptr [ebx], 0 ; checking if the location ebx is pointing to is min 0
+        jbe skipResetPercentage
+        
+        dec dword ptr [ebx]
+
+        skipResetPercentage:
+
+        mov eax, dword ptr [rPercentage]
+        invoke printToConsole, eax
 
         push [cube].N
         push 0
@@ -1964,7 +2090,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         push ebx
         fist dword ptr [esp]
         pop ebx
-        invoke printToConsole, ebx
+        ; invoke printToConsole, ebx
 
         ; invoke addDensity, offset [cube].density, [cube].N, 0, 0, real4 ptr [real2]
         ; invoke addDensity, offset [cube].density, [cube].N, 20, 20, real4 ptr [real2]
@@ -2047,10 +2173,12 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         mov edx, 0
         div ebx
         mov ebx, eax ; screen width / N in ebx
+        mov dword ptr [gridLengthX], ebx
         mov eax, [screen].bottom
         mov ecx, [cube].N
         mov edx, 0
         div ecx ; screen height / N in eax
+        mov dword ptr [gridLengthY], eax
         mov ecx, [cube].N
 
         xGridLoop:
@@ -2075,6 +2203,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
                 push ebx
                 push eax
 
+
                 cmp byte ptr [moved], 1
                 je reDraw ; if the window has been moved, we need to redraw everything since it deletes it
                 push ebx ; pushing ebx as to not change it
@@ -2083,6 +2212,74 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
                 push ecx
                 call IX
                 ; invoke printToConsole, ecx
+                pop ebx
+                push ebx
+                add ebx, offset [cube].density
+                fstp st(0)
+                fld real4 ptr [ebx]
+                mov eax, 24e69595h
+                push eax
+                fsub real4 ptr [esp]
+                pop eax
+                mov eax, 0
+                push eax
+                ficom dword ptr [esp] ; comparing to x val
+                fstsw ax          ;copy the Status Word containing the result to AX
+                fwait             ;insure the previous instruction is completed
+                sahf              ;transfer the condition codes to the CPU's flag register
+                jae skipFade
+                fstp st(0)
+                fild dword ptr [esp]
+                skipFade:
+                pop eax
+                fst real4 ptr [ebx]
+
+                sub ebx, offset [cube].density
+
+                add ebx, offset [cube].Vx
+                fstp st(0)
+                fld real4 ptr [ebx]
+                mov eax, 24e69595h
+                push eax
+                fsub real4 ptr [esp]
+                pop eax
+                mov eax, 0
+                push eax
+                ficom dword ptr [esp] ; comparing to x val
+                fstsw ax          ;copy the Status Word containing the result to AX
+                fwait             ;insure the previous instruction is completed
+                sahf              ;transfer the condition codes to the CPU's flag register
+                jae skipFadeVx
+                fstp st(0)
+                fild dword ptr [esp]
+                skipFadeVx:
+                pop eax
+                fst real4 ptr [ebx]
+
+
+                sub ebx, offset [cube].Vx
+
+                add ebx, offset [cube].Vy
+                fstp st(0)
+                fld real4 ptr [ebx]
+                mov eax, 3727c5ach
+                push eax
+                fsub real4 ptr [esp]
+                pop eax
+                mov eax, 0
+                push eax
+                ficom dword ptr [esp] ; comparing to x val
+                fstsw ax          ;copy the Status Word containing the result to AX
+                fwait             ;insure the previous instruction is completed
+                sahf              ;transfer the condition codes to the CPU's flag register
+                jae skipFadeVy
+                fstp st(0)
+                fild dword ptr [esp]
+                skipFadeVy:
+                pop eax
+                fst real4 ptr [ebx]
+
+
                 pop ebx
                 mov eax, ebx
                 add ebx, offset [cube].density
@@ -2148,10 +2345,45 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
                 pop ebx
                 mov eax, 0
                 mov al, bl
-                ; mov al, 9
+                push eax
+                mov eax, 255
+                push eax
+                fstp st(0)
+                fild dword ptr [bPercentage]
+                fidiv dword ptr [esp]
+                pop eax
+                fimul dword ptr [esp]
+                fist dword ptr [esp]
+                pop eax
                 shl eax, 16
-                mov al, bl
-                mov ah, al
+                mov ecx, 0
+                mov cl, bl
+                push ecx
+                mov ecx, 255
+                push ecx
+                fstp st(0)
+                fild dword ptr [gPercentage]
+                fidiv dword ptr [esp]
+                pop ecx
+                fimul dword ptr [esp]
+                fist dword ptr [esp]
+                pop ecx
+                mov ah, cl
+
+                mov ecx, 0
+                mov cl, bl
+                push ecx
+                mov ecx, 255
+                push ecx
+                fstp st(0)
+                fild dword ptr [rPercentage]
+                fidiv dword ptr [esp]
+                pop ecx
+                fimul dword ptr [esp]
+                fist dword ptr [esp]
+                pop ecx
+                mov al, cl
+
                 mov [bcolor], eax
                 invoke drawSquare, bcolor, ps.hdc, offset tempColor, grid
                 ; invoke printToConsole, eax
