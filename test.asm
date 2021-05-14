@@ -37,6 +37,11 @@ includelib C:\masm32\lib\masm32.lib     ; dwtoa
 .CONST
 DRAWING equ 1
 WAITING equ 0
+R equ 0
+G equ 1
+B equ 2
+RGBC equ 3
+GRAY equ 4
 
 .DATA
     ClassName db 'SimpleWinClass',0
@@ -57,16 +62,48 @@ WAITING equ 0
     bcolor COLORREF 00111111h
     tempColor COLORREF 0
 
-    cube FluidCube <0.0, 0.2, 0.0001>
+    cube FluidCube <0.0001, 0.2, 0.00001>
     ThreeBytes db 10h,20h,30h
     real2 real4 150.0
-    realTest real4 0.7
-    realTest2 real4 -0.5
+    realTest real4 -0.7
+    realTest2 real4 0.7
     realTest3 real4 0.1
+    vectorNormalizer real4 0.0109375
+    vectorDivisor real4 1.00001
 
     consoleOutHandle dd ? 
     bytesWritten dd ? 
-    message db "Hello World",13,10
+    message db "-----------------------------------------------------------------------------------------------------------------------",13,10
+            db "|                                                                                                                     |",13,10
+            db "|                                                                                                                     |",13,10
+            db "|         _______________      ______________   ________                                 _____                        |",13,10
+            db "|         ___  ____/__  /___  ____(_)_____  /   ___  __ \____  ______________ _______ ______(_)_____________          |",13,10
+            db "|         __  /_   __  /_  / / /_  /_  __  /    __  / / /_  / / /_  __ \  __ `/_  __ `__ \_  /_  ___/_  ___/          |",13,10
+            db "|         _  __/   _  / / /_/ /_  / / /_/ /     _  /_/ /_  /_/ /_  / / / /_/ /_  / / / / /  / / /__ _(__  )           |",13,10
+            db "|         /_/      /_/  \__,_/ /_/  \__,_/      /_____/ _\__, / /_/ /_/\__,_/ /_/ /_/ /_//_/  \___/ /____/            |",13,10
+            db "|                                                       /____/                                                        |",13,10
+            db "|                                                                                                                     |",13,10
+            db "|                                      ~~~~~~~~~~~~~~~ CONTROLS ~~~~~~~~~~~~~~~                                       |",13,10
+            db "|                                                                                                                     |",13,10
+            db "| TOGGLE TIMESTEP (HOW MUCH TIME PASSES EACH FRAME) ...... RIGHT ARRROW (FASTER) / LEFT ARROW (SLOWER)                |",13,10
+            db "|                                                                                                                     |",13,10
+            db "| TOGGLE VISCOSITY ....................................... UP ARROW (HIGHER VISCOSITY) / DOWN ARROW (LOWER VISCOSITY) |",13,10
+            db "|                                                                                                                     |",13,10
+            db "| TOGGLE DIFFUSION RATE .................................. + (HIGHER) / - (LOWER)                                     |",13,10
+            db "|                                                                                                                     |",13,10
+            db "| CHANGE COLOR MODE TO GRAYSCALE ......................... 1                                                          |",13,10
+            db "|                                                                                                                     |",13,10
+            db "| CHANGE COLOR MODE TO RED ............................... 2                                                          |",13,10
+            db "|                                                                                                                     |",13,10
+            db "| CHANGE COLOR MODE TO GREEN ............................. 3                                                          |",13,10
+            db "|                                                                                                                     |",13,10
+            db "| CHANGE COLOR MODE TO BLUE .............................. 4                                                          |",13,10
+            db "|                                                                                                                     |",13,10
+            db "| CHANGE COLOR MODE TO RGB TRANSITIONS ................... 5                                                          |",13,10
+            db "|                                                                                                                     |",13,10
+            db "|                                                                                                                     |",13,10
+            db "-----------------------------------------------------------------------------------------------------------------------";,13,10
+    message2 db "ddddddddddddddddddddd",13,10
     lmessage dd 13
     gridLengthX dd 1
     gridLengthY dd 1
@@ -77,6 +114,8 @@ WAITING equ 0
 
     colorCounter dd 0
     repCounter dd 1
+    
+    mode dd GRAY
 
 
 .DATA?
@@ -1724,13 +1763,19 @@ printToConsole proc messageToPrint: dword
     push ebx
     push ecx
     push edx
-    invoke dwtoa, messageToPrint, offset message
+    ; invoke dwtoa, messageToPrint, offset message
 
     INVOKE GetStdHandle, STD_OUTPUT_HANDLE
     mov consoleOutHandle, eax
     mov edx, offset message
     pushad
-    mov eax, 8
+    mov eax, 121
+    push edx
+    mov edx, 0
+    mov ebx, 30
+    mul ebx
+    pop edx
+
     invoke WriteConsoleA, consoleOutHandle, edx, eax, offset bytesWritten, 0
     popad
 
@@ -1741,6 +1786,30 @@ printToConsole proc messageToPrint: dword
 
     ret
 printToConsole endp
+
+dprintToConsole proc messageToPrint: dword
+    push eax
+    push ebx
+    push ecx
+    push edx
+    invoke dwtoa, messageToPrint, offset message2
+
+    INVOKE GetStdHandle, STD_OUTPUT_HANDLE
+    mov consoleOutHandle, eax
+    mov edx, offset message2
+    pushad
+    mov eax, 16
+
+    invoke WriteConsoleA, consoleOutHandle, edx, eax, offset bytesWritten, 0
+    popad
+
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+
+    ret
+dprintToConsole endp
 
 drawSquare proc color: COLORREF, deviceContext: HDC, temp: COLORREF, pos: RECT
     push eax
@@ -1788,6 +1857,107 @@ gradient proc
     ret
 gradient endp
 
+getColor proc
+    ; gets color value according to the requested mode
+    ; INPUTS - COLOR (bp + 8), MODE (bp + 12)
+    ; OUTPUTS - color value
+    push ebp
+    mov ebp, esp
+
+    push eax
+    push ebx
+    push ecx
+
+    mov ebx, dword ptr [ebp + 8]
+    mov eax, 0
+
+    cmp dword ptr [ebp + 12], RGBC
+    je ON_RGB
+
+    cmp dword ptr [ebp + 12], R
+    je ON_R
+
+    cmp dword ptr [ebp + 12], G
+    je ON_G
+
+    cmp dword ptr [ebp + 12], B
+    je ON_B
+
+    cmp dword ptr [ebp + 12], GRAY
+    je ON_GRAY
+
+    ON_RGB:
+        mov al, bl
+        push eax
+        mov eax, 255
+        push eax
+        fstp st(0)
+        fild dword ptr [bPercentage]
+        fidiv dword ptr [esp]
+        pop eax
+        fimul dword ptr [esp]
+        fist dword ptr [esp]
+        pop eax
+        shl eax, 16
+        mov ecx, 0
+        mov cl, bl
+        push ecx
+        mov ecx, 255
+        push ecx
+        fstp st(0)
+        fild dword ptr [gPercentage]
+        fidiv dword ptr [esp]
+        pop ecx
+        fimul dword ptr [esp]
+        fist dword ptr [esp]
+        pop ecx
+        mov ah, cl
+
+        mov ecx, 0
+        mov cl, bl
+        push ecx
+        mov ecx, 255
+        push ecx
+        fstp st(0)
+        fild dword ptr [rPercentage]
+        fidiv dword ptr [esp]
+        pop ecx
+        fimul dword ptr [esp]
+        fist dword ptr [esp]
+        pop ecx
+        mov al, cl
+        jmp END_COLOR
+    
+    ON_R:
+        mov al, bl
+        jmp END_COLOR
+
+    ON_G:
+        mov ah, bl
+        jmp END_COLOR
+        
+    ON_B:
+        mov al, bl
+        shl eax, 16
+        jmp END_COLOR
+
+    ON_GRAY:
+        mov al, bl
+        shl eax, 16
+        mov al, bl
+        mov ah, bl
+
+    END_COLOR:
+    mov dword ptr [ebp + 12], eax
+
+    pop ecx
+    pop ebx
+    pop eax
+
+    pop ebp
+    ret 4
+getColor endp
+
 ; https://msdn.microsoft.com/library/windows/desktop/ms633573.aspx
 WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
     LOCAL screen:RECT
@@ -1819,30 +1989,239 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
     cmp uMsg, WM_KEYDOWN
     je ON_WM_KEYDOWN
 
+    ; cmp uMsg, WM_SIZE
+    ; je ON_WM_MOVE
+
     jmp ON_DEFAULT
 
     ON_WM_KEYDOWN:
-        ; mov eax, 0
-        ; mov ah, 1
-        ; int 16h
+
+        mov eax, lParam
+        and eax, 111111110000000000000000b
+        shr eax, 16 ; eax now has the scancode of the keyboard input
+
         ; invoke printToConsole, eax
-        fstp st(0)
-        fld real4 ptr [bPercentage]
-        fadd real4 ptr [realTest3]
-        mov eax, 1
-        push eax
-        ficom dword ptr [esp] ; comparing to x val
-        fstsw ax          ;copy the Status Word containing the result to AX
-        fwait             ;insure the previous instruction is completed
-        sahf              ;transfer the condition codes to the CPU's flag register
-        ja resetPercentage
-        fstp st(0)
-        mov dword ptr [esp], 0
-        fild dword ptr [esp]
-        resetPercentage:
-        pop eax
-        fst real4 ptr [bPercentage]
+
+        cmp eax, 10h ; q
+        je ON_K_Q
+
+        cmp eax, 02h ; 1
+        je ON_K_1
+
+        cmp eax, 03h ; 2
+        je ON_K_2
+
+        cmp eax, 04h ; 3
+        je ON_K_3
+
+        cmp eax, 05h ; 4
+        je ON_K_4
+
+        cmp eax, 06h ; 5
+        je ON_K_5
+
+        cmp eax, 4dh ; right arrow
+        je ON_K_RIGHT
+
+        cmp eax, 4bh ; left arrow
+        je ON_K_LEFT
+
+        cmp eax, 48h ; up arrow
+        je ON_K_UP
+
+        cmp eax, 50h ; down arrow
+        je ON_K_DOWN
+
+        cmp eax, 0ch ; -
+        je ON_K_MINUS
+
+        cmp eax, 0dh ; +
+        je ON_K_PLUS
+
+        jmp EXIT
+
+        ON_K_Q:
+            jmp ON_WM_DESTROY
+
+        ON_K_1:
+            mov dword ptr [mode], GRAY
+            jmp EXIT
+            
+        ON_K_2:
+            mov dword ptr [mode], R
+            jmp EXIT
+
+        ON_K_3:
+            mov dword ptr [mode], G
+            jmp EXIT
         
+        ON_K_4:
+            mov dword ptr [mode], B
+            jmp EXIT
+        
+        ON_K_5:
+            mov dword ptr [mode], RGBC
+            jmp EXIT
+
+        ON_K_RIGHT:
+            fstp st(0)
+            fld real4 ptr [cube].deltat
+            mov eax, 3c23d70ah
+            push eax
+            fadd real4 ptr [esp]
+            pop eax
+            mov eax, 1
+            push eax
+            ficom dword ptr [esp] ; comparing to x val
+            fstsw ax          ;copy the Status Word containing the result to AX
+            fwait             ;insure the previous instruction is completed
+            sahf              ;transfer the condition codes to the CPU's flag register
+            jb skipResetDT1
+            fstp st(0)
+            fild dword ptr [esp]
+            skipResetDT1:
+            pop eax
+            fst real4 ptr [cube].deltat
+            
+            push eax
+            fst real4 ptr [esp]
+            pop eax
+            invoke dprintToConsole, eax
+            jmp EXIT
+
+        ON_K_LEFT:
+            fstp st(0)
+            fld real4 ptr [cube].deltat
+            mov eax, 3c23d70ah
+            push eax
+            fsub real4 ptr [esp]
+            pop eax
+            mov eax, 3c23d70ah
+            push eax
+            fcom dword ptr [esp] ; comparing to x val
+            fstsw ax          ;copy the Status Word containing the result to AX
+            fwait             ;insure the previous instruction is completed
+            sahf              ;transfer the condition codes to the CPU's flag register
+            ja skipResetDT2
+            fstp st(0)
+            fld dword ptr [esp]
+            skipResetDT2:
+            pop eax
+            fst real4 ptr [cube].deltat
+
+            push eax
+            fst real4 ptr [esp]
+            pop eax
+            invoke dprintToConsole, eax     
+
+            jmp EXIT
+
+        ON_K_UP:
+            fstp st(0)
+            fld real4 ptr [cube].visc
+            mov eax, 3a83126fh
+            push eax
+            fadd real4 ptr [esp]
+            pop eax
+            mov eax, 3dcccccdh
+            push eax
+            fcom dword ptr [esp] ; comparing to x val
+            fstsw ax          ;copy the Status Word containing the result to AX
+            fwait             ;insure the previous instruction is completed
+            sahf              ;transfer the condition codes to the CPU's flag register
+            jb skipResetVisc1
+            fstp st(0)
+            fld dword ptr [esp]
+            skipResetVisc1:
+            pop eax
+            fst real4 ptr [cube].visc
+
+            push eax
+            fst real4 ptr [esp]
+            pop eax
+            invoke dprintToConsole, eax 
+
+            jmp EXIT
+
+        ON_K_DOWN:
+            fstp st(0)
+            fld real4 ptr [cube].visc
+            mov eax, 3a83126fh
+            push eax
+            fsub real4 ptr [esp]
+            pop eax
+            mov eax, 3727c5ach
+            push eax
+            fcom dword ptr [esp] ; comparing to x val
+            fstsw ax          ;copy the Status Word containing the result to AX
+            fwait             ;insure the previous instruction is completed
+            sahf              ;transfer the condition codes to the CPU's flag register
+            ja skipResetVisc2
+            fstp st(0)
+            fld dword ptr [esp]
+            skipResetVisc2:
+            pop eax
+            fst real4 ptr [cube].visc
+
+            push eax
+            fst real4 ptr [esp]
+            pop eax
+            invoke dprintToConsole, eax
+            
+            jmp EXIT
+
+        ON_K_PLUS:
+            fstp st(0)
+            fld real4 ptr [cube].diff
+            mov eax, 3727c5ach
+            push eax
+            fadd real4 ptr [esp]
+            pop eax
+            mov eax, 3dcccccdh
+            push eax
+            fcom dword ptr [esp] ; comparing to x val
+            fstsw ax          ;copy the Status Word containing the result to AX
+            fwait             ;insure the previous instruction is completed
+            sahf              ;transfer the condition codes to the CPU's flag register
+            jb skipResetDiff1
+            fstp st(0)
+            fld dword ptr [esp]
+            skipResetDiff1:
+            pop eax
+            fst real4 ptr [cube].diff
+
+            push eax
+            fst real4 ptr [esp]
+            pop eax
+            invoke dprintToConsole, eax
+
+            jmp EXIT
+        ON_K_MINUS:
+            fstp st(0)
+            fld real4 ptr [cube].diff
+            mov eax, 3727c5ach
+            push eax
+            fsub real4 ptr [esp]
+            pop eax
+            mov eax, 0
+            push eax
+            ficom dword ptr [esp] ; comparing to x val
+            fstsw ax          ;copy the Status Word containing the result to AX
+            fwait             ;insure the previous instruction is completed
+            sahf              ;transfer the condition codes to the CPU's flag register
+            ja skipResetDiff2
+            fstp st(0)
+            fild dword ptr [esp]
+            skipResetDiff2:
+            pop eax
+            fst real4 ptr [cube].diff
+
+            push eax
+            fst real4 ptr [esp]
+            pop eax
+            invoke dprintToConsole, eax
+
+            jmp EXIT
         jmp EXIT
 
     ON_WM_DESTROY:              ; User closes program
@@ -1877,6 +2256,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         invoke CreateSolidBrush, 00EEEEEEh
         mov hbr, eax
 
+        invoke printToConsole, ' '
         ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
 
         jmp EXIT
@@ -1945,6 +2325,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         push ebx
 
         push eax
+
         push ebx
 
         mov eax, lastpoint.x
@@ -1953,7 +2334,9 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         mov edx, 0
         div ebx
         pop edx
-        sub ecx, eax
+        sub ebx, eax
+        ; sub eax, ecx
+        ; mov ecx, eax
         pop ebx
         push ecx
         
@@ -1964,40 +2347,51 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         div ecx
         pop edx
         sub ebx, eax
-        pop ebx
+        ; sub eax, ebx
+        ; mov ebx, eax
+    
+        pop ecx
 
         pop eax ; popping to reset the stack
 
-        ; cmp ecx, 1
-        ; jbe skip1c
-        ; mov ecx, 1
-        ; skip1c:
-        ; cmp ecx, -1
-        ; jae skip_1c
-        ; mov ecx, -1
-        ; skip_1c:
 
-        push ecx
-        fstp st(0)
-        fild dword ptr [esp]
-        fst real4 ptr [realTest2]
-        pop ecx
+        ; rcl ebx, 1
+        ; jc skip_1b
+        ; mov ebx, 0bf333333h
+        ; jmp skip1b
+        ; skip_1b:
+        ; rcr ebx, 1
+        ; cmp ebx, 0
+        ; je skip1b
+        ; mov ebx, 3f333333h
+        ; skip1b:
 
-        ; cmp ebx, 1
-        ; jbe skip1
-        ; mov ebx, 1
-        ; skip1:
-        ; invoke printToConsole, ebx
-        ; cmp ebx, -1
-        ; jae skip_1
-        ; mov ebx, -1
-        ; skip_1:
 
-        push ebx
-        fstp st(0)
-        fild dword ptr [esp]
-        fst real4 ptr [realTest]
-        pop ebx
+        ; push ebx
+        ; fstp st(0)
+        ; fild dword ptr [esp]
+        ; fmul real4 ptr [vectorNormalizer]
+        ; fst real4 ptr [realTest2]
+        ; pop ebx
+
+        ; ; rcl ecx, 1
+        ; ; jc skip_1c
+        ; ; mov ecx, 0bf333333h
+        ; ; jmp skip1c
+        ; ; skip_1c:
+        ; ; rcr ecx, 1
+        ; ; cmp ecx, 0
+        ; ; je skip1c
+        ; ; mov ecx, 3f333333h
+        ; ; skip1c:
+        ; ; invoke printToConsole, ecx
+
+        ; push ecx
+        ; fstp st(0)
+        ; fild dword ptr [esp]
+        ; fmul real4 ptr [vectorNormalizer]
+        ; fst real4 ptr [realTest]
+        ; pop ecx
 
 
         pop ebx
@@ -2030,9 +2424,9 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         jne EXIT ; fps cap
 
 
-        ; making smooth RGB
+        ; making smooth RGBC
         inc dword ptr [colorCounter]
-        cmp dword ptr [colorCounter], 1FFh ; colorCounter goes from 0 - 510 and will get the smooth rgb transition
+        cmp dword ptr [colorCounter], 1FFh ; colorCounter goes from 0 - 510 and will get the smooth RGBC transition
         jbe resetColorCounter
 
         mov dword ptr [colorCounter], 0
@@ -2076,21 +2470,6 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 
         skipResetPercentage:
 
-        mov eax, dword ptr [rPercentage]
-        invoke printToConsole, eax
-
-        push [cube].N
-        push 0
-        push 0
-        call IX
-        pop ebx
-        add ebx, offset [cube].density
-        fstp st(0)
-        fld real4 ptr [ebx]
-        push ebx
-        fist dword ptr [esp]
-        pop ebx
-
         push offset [cube].density
         push offset [cube].s
         push offset [cube].Vy0
@@ -2115,12 +2494,6 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         skipResetFps:
         inc word ptr [fps]
         mov word ptr [second], ax ; getting fps num
-
-        invoke SetWindowText, hwndY, offset Y
-        mov eax, hitpoint.x             ; last mouse position = current mouse position
-        mov lastpoint.x, eax
-        mov eax, hitpoint.y
-        mov lastpoint.y, eax ; updating y val in box
 
         invoke BeginPaint, hWnd, offset ps ; beginning paint to draw
         invoke GetClientRect, hWnd, addr screen
@@ -2192,47 +2565,22 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 
                 sub ebx, offset [cube].density
 
+
+                ; FADING THE VELS ----------------------------------------------------
+                ; this shit sucks so i better fix it
+
                 add ebx, offset [cube].Vx
                 fstp st(0)
                 fld real4 ptr [ebx]
-                mov eax, 24e69595h
-                push eax
-                fsub real4 ptr [esp]
-                pop eax
-                mov eax, 0
-                push eax
-                ficom dword ptr [esp] ; comparing to x val
-                fstsw ax          ;copy the Status Word containing the result to AX
-                fwait             ;insure the previous instruction is completed
-                sahf              ;transfer the condition codes to the CPU's flag register
-                jae skipFadeVx
-                fstp st(0)
-                fild dword ptr [esp]
-                skipFadeVx:
-                pop eax
+                fdiv real4 ptr [vectorDivisor]
                 fst real4 ptr [ebx]
-
 
                 sub ebx, offset [cube].Vx
 
                 add ebx, offset [cube].Vy
                 fstp st(0)
                 fld real4 ptr [ebx]
-                mov eax, 3727c5ach
-                push eax
-                fsub real4 ptr [esp]
-                pop eax
-                mov eax, 0
-                push eax
-                ficom dword ptr [esp] ; comparing to x val
-                fstsw ax          ;copy the Status Word containing the result to AX
-                fwait             ;insure the previous instruction is completed
-                sahf              ;transfer the condition codes to the CPU's flag register
-                jae skipFadeVy
-                fstp st(0)
-                fild dword ptr [esp]
-                skipFadeVy:
-                pop eax
+                fdiv real4 ptr [vectorDivisor]
                 fst real4 ptr [ebx]
 
 
@@ -2299,46 +2647,11 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
                 push eax
                 fist dword ptr [esp]
                 pop ebx
-                mov eax, 0
-                mov al, bl
-                push eax
-                mov eax, 255
-                push eax
-                fstp st(0)
-                fild dword ptr [bPercentage]
-                fidiv dword ptr [esp]
-                pop eax
-                fimul dword ptr [esp]
-                fist dword ptr [esp]
-                pop eax
-                shl eax, 16
-                mov ecx, 0
-                mov cl, bl
-                push ecx
-                mov ecx, 255
-                push ecx
-                fstp st(0)
-                fild dword ptr [gPercentage]
-                fidiv dword ptr [esp]
-                pop ecx
-                fimul dword ptr [esp]
-                fist dword ptr [esp]
-                pop ecx
-                mov ah, cl
 
-                mov ecx, 0
-                mov cl, bl
-                push ecx
-                mov ecx, 255
-                push ecx
-                fstp st(0)
-                fild dword ptr [rPercentage]
-                fidiv dword ptr [esp]
-                pop ecx
-                fimul dword ptr [esp]
-                fist dword ptr [esp]
-                pop ecx
-                mov al, cl
+                push dword ptr [mode]
+                push ebx
+                call getColor
+                pop eax
 
                 mov [bcolor], eax
                 invoke drawSquare, bcolor, ps.hdc, offset tempColor, grid
