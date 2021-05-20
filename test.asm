@@ -51,8 +51,12 @@ GRAY equ 4
     labelWaiting db 'Waiting.',0
 
     StaticClassName db 'static',0
-    X dw 'x',0
-    Y dw 'y',0
+    V db 'V', 2 dup (' ')
+    VVal db '0.00001', 8 dup (?), 0
+    Deltat db 'DT', 2 dup (' ')
+    DeltatVal db '0.2', 12 dup (?), 0
+    D db 'D', 2 dup (' ')
+    DVal db '0.00001', 8 dup (?), 0
 
     state db WAITING
     moved db 0
@@ -65,11 +69,11 @@ GRAY equ 4
     cube FluidCube <0.0001, 0.2, 0.00001>
     ThreeBytes db 10h,20h,30h
     real2 real4 150.0
-    realTest real4 -0.7
-    realTest2 real4 0.7
+    realTest real4 2.0
+    realTest2 real4 2.0
     realTest3 real4 0.1
-    vectorNormalizer real4 0.0109375
-    vectorDivisor real4 1.00001
+    vectorNormalizer real4 0.4
+    vectorDivisor real4 1.01
 
     consoleOutHandle dd ? 
     bytesWritten dd ? 
@@ -85,11 +89,11 @@ GRAY equ 4
             db "|                                                                                                                     |",13,10
             db "|                                      ~~~~~~~~~~~~~~~ CONTROLS ~~~~~~~~~~~~~~~                                       |",13,10
             db "|                                                                                                                     |",13,10
-            db "| TOGGLE TIMESTEP (HOW MUCH TIME PASSES EACH FRAME) ...... RIGHT ARRROW (FASTER) / LEFT ARROW (SLOWER)                |",13,10
+            db "| TOGGLE VISCOSITY (V)..................................... UP ARROW (HIGHER VISCOSITY) / DOWN ARROW (LOWER VISCOSITY)|",13,10
             db "|                                                                                                                     |",13,10
-            db "| TOGGLE VISCOSITY ....................................... UP ARROW (HIGHER VISCOSITY) / DOWN ARROW (LOWER VISCOSITY) |",13,10
+            db "| TOGGLE TIMESTEP (DT) (HOW MUCH TIME PASSES EACH FRAME) .. RIGHT ARRROW (FASTER) / LEFT ARROW (SLOWER)               |",13,10
             db "|                                                                                                                     |",13,10
-            db "| TOGGLE DIFFUSION RATE .................................. + (HIGHER) / - (LOWER)                                     |",13,10
+            db "| TOGGLE DIFFUSION RATE (D) .................................. + (HIGHER) / - (LOWER)                                 |",13,10
             db "|                                                                                                                     |",13,10
             db "| CHANGE COLOR MODE TO GRAYSCALE ......................... 1                                                          |",13,10
             db "|                                                                                                                     |",13,10
@@ -114,6 +118,7 @@ GRAY equ 4
 
     colorCounter dd 0
     repCounter dd 1
+    floatSave dq ?
     
     mode dd GRAY
 
@@ -139,30 +144,6 @@ GRAY equ 4
     hPen HPEN ?
 
 .CODE
-
-delay proc
-    push eax
-    push ebx
-    push ecx
-
-    mov eax, 00000DFFh
-    mov ebx, 0
-    mov ecx, 0
-    loop1:
-    inc ebx
-    loop2:
-    inc ecx
-    cmp ecx, eax
-    jnz loop2
-    mov ecx, 0
-    cmp ebx, eax
-    jnz loop1 ; nested loops - delaying by incrementing bx and cx until they equal the val in ax. change ax to change delay time
-
-    pop ecx
-    pop ebx
-    pop eax
-    ret
-delay endp
 
 IX proc ;x:dword, y:dword, N:word
     ; bp+4 = x, bp+6 = y, bp+8 = N
@@ -1704,59 +1685,21 @@ fluidStep proc
     ret 40
 fluidStep endp
 
-
-fputest proc
-    
-    fstp st(0)
-    fld real4 ptr [real2]
-    fstp st(0)
-    fld real4 ptr [real2]
-
-    ret
-fputest endp
-
 updateXY PROC lParam:LPARAM
     movzx eax, WORD PTR lParam
     mov hitpoint.x, eax
 
-    invoke dwtoa, eax, offset X
-    invoke SetWindowText, hwndX, offset X
+    ; invoke dwtoa, eax, offset X
+    ; invoke SetWindowText, hwndX, offset X
 
     mov eax, lParam
     shr eax, 16
     mov hitpoint.y, eax
 
-    invoke dwtoa, eax, offset Y
-    invoke SetWindowText, hwndY, offset Y
+    ; invoke dwtoa, eax, offset Y
+    ; invoke SetWindowText, hwndY, offset Y
     ret
 updateXY ENDP
-
-changePenColor proc color:dword
-    push eax
-
-    invoke CreatePen, PS_SOLID, 2, color
-    mov hPen, eax
-
-    pop eax
-    ret
-changePenColor endp
-
-changeBrushColor proc color: COLORREF, deviceContext: HDC
-    push eax
-    push ebx
-    push ecx
-    push edx
-    
-    invoke DeleteObject, hbr
-    invoke CreateSolidBrush, color
-    mov hbr, eax
-
-    pop edx
-    pop ecx
-    pop ebx
-    pop eax
-    ret
-changeBrushColor endp
 
 printToConsole proc messageToPrint: dword
     push eax
@@ -1831,31 +1774,6 @@ drawSquare proc color: COLORREF, deviceContext: HDC, temp: COLORREF, pos: RECT
     pop eax
     ret
 drawSquare endp
-
-gradient proc
-    push eax
-    push ebx
-    push ecx
-    push edx
-
-    mov eax, dword ptr [bcolor]
-    cmp eax, 00FFFFFFh
-    jne notReset
-    mov eax, 0
-    notReset:
-    inc eax
-    add eax, 100h
-    add eax, 10000h
-    mov dword ptr [bcolor], eax
-    invoke changeBrushColor, eax, ps.hdc
-
-    pop edx
-    pop ecx
-    pop ebx
-    pop eax
-
-    ret
-gradient endp
 
 getColor proc
     ; gets color value according to the requested mode
@@ -1964,7 +1882,6 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
     LOCAL grid:RECT
     LOCAl systime:SYSTEMTIME
 
-
     cmp uMsg, WM_MOUSEMOVE
     je ON_WM_MOUSEMOVE
 
@@ -1983,6 +1900,9 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
     cmp uMsg, WM_MOVE
     je ON_WM_MOVE
 
+    cmp uMsg, WM_MOVING
+    je ON_WM_MOVE
+
     cmp uMsg, WM_DESTROY
     je ON_WM_DESTROY
 
@@ -1996,11 +1916,31 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 
     ON_WM_KEYDOWN:
 
+        fstp st(0)
+        fld real4 ptr [cube].visc
+        fst qword ptr floatSave
+        mov eax, offset VVal
+        invoke FloatToStr, floatSave, eax
+        invoke SetWindowText, hwndX, offset V
+
+        fstp st(0)
+        fld real4 ptr [cube].deltat
+        fst qword ptr floatSave
+        mov eax, offset DeltatVal
+        invoke FloatToStr, floatSave, eax
+        invoke SetWindowText, hwndY, offset Deltat
+
+        fstp st(0)
+        fld real4 ptr [cube].diff
+        fst qword ptr floatSave
+        mov eax, offset DVal
+        invoke FloatToStr, floatSave, eax
+        invoke SetWindowText, hwndState, offset D
+
         mov eax, lParam
         and eax, 111111110000000000000000b
         shr eax, 16 ; eax now has the scancode of the keyboard input
 
-        ; invoke printToConsole, eax
 
         cmp eax, 10h ; q
         je ON_K_Q
@@ -2083,10 +2023,10 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
             pop eax
             fst real4 ptr [cube].deltat
             
-            push eax
-            fst real4 ptr [esp]
-            pop eax
-            invoke dprintToConsole, eax
+            ; push eax
+            ; fst real4 ptr [esp]
+            ; pop eax
+            ; invoke dprintToConsole, eax
             jmp EXIT
 
         ON_K_LEFT:
@@ -2109,10 +2049,10 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
             pop eax
             fst real4 ptr [cube].deltat
 
-            push eax
-            fst real4 ptr [esp]
-            pop eax
-            invoke dprintToConsole, eax     
+            ; push eax
+            ; fst real4 ptr [esp]
+            ; pop eax
+            ; invoke dprintToConsole, eax     
 
             jmp EXIT
 
@@ -2136,10 +2076,10 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
             pop eax
             fst real4 ptr [cube].visc
 
-            push eax
-            fst real4 ptr [esp]
-            pop eax
-            invoke dprintToConsole, eax 
+            ; push eax
+            ; fst real4 ptr [esp]
+            ; pop eax
+            ; invoke dprintToConsole, eax 
 
             jmp EXIT
 
@@ -2163,10 +2103,10 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
             pop eax
             fst real4 ptr [cube].visc
 
-            push eax
-            fst real4 ptr [esp]
-            pop eax
-            invoke dprintToConsole, eax
+            ; push eax
+            ; fst real4 ptr [esp]
+            ; pop eax
+            ; invoke dprintToConsole, eax
             
             jmp EXIT
 
@@ -2190,10 +2130,10 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
             pop eax
             fst real4 ptr [cube].diff
 
-            push eax
-            fst real4 ptr [esp]
-            pop eax
-            invoke dprintToConsole, eax
+            ; push eax
+            ; fst real4 ptr [esp]
+            ; pop eax
+            ; invoke dprintToConsole, eax
 
             jmp EXIT
         ON_K_MINUS:
@@ -2216,10 +2156,10 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
             pop eax
             fst real4 ptr [cube].diff
 
-            push eax
-            fst real4 ptr [esp]
-            pop eax
-            invoke dprintToConsole, eax
+            ; push eax
+            ; fst real4 ptr [esp]
+            ; pop eax
+            ; invoke dprintToConsole, eax
 
             jmp EXIT
         jmp EXIT
@@ -2243,11 +2183,11 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         fwait
         pop ebx ; setting the control word to have the rounding set to round down
 
-        invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset X, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 20, 20, 50, 25, hWnd, 1, hInstance, NULL
+        invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset V, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 20, 20, 150, 25, hWnd, 1, hInstance, NULL
         mov hwndX, eax
-        invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset Y, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 90, 20, 50, 25, hWnd, 1, hInstance, NULL
+        invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset Deltat, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 20, 50, 150, 25, hWnd, 1, hInstance, NULL
         mov hwndY, eax
-        invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset labelWaiting, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 20, 60, 80, 23, hWnd, 1, hInstance, NULL
+        invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset D, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 20, 80, 150, 25, hWnd, 1, hInstance, NULL
         mov hwndState, eax
 
         ; Create pen for LineTo
@@ -2262,41 +2202,12 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         jmp EXIT
 
     ON_WM_LBUTTONDOWN:
-
-        ; last mouse position = current mouse position
-        ; mov eax, hitpoint.x
-        ; mov lastpoint.x, eax
-        ; mov eax, hitpoint.y
-        ; mov lastpoint.y, eax
-
-
         mov [state], DRAWING
-        invoke SetWindowText, hwndState, offset labelDrawing
-
-
-        ; invoke addDensity, offset [cube].density, [cube].N, 20, 20, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 21, 20, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 19, 20, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 20, 21, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 35, 43, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 12, 1, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 8, 9, real4 ptr [real2]
-        ; invoke addDensity, offset [cube].density, [cube].N, 60, 10, real4 ptr [real2]
-        ; ; invoke addDensity, offset [cube].density, [cube].N, 20, , real4 ptr [real2]
-        ; ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
-        ; ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 20, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 19, 20, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 21, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 20, 19, real4 ptr [realTest], real4 ptr [realTest]
-        ; invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, 21, 20, real4 ptr [realTest], real4 ptr [realTest]
-
 
         jmp EXIT
 
     ON_WM_LBUTTONUP:
         mov [state], WAITING
-        invoke SetWindowText, hwndState, offset labelWaiting
         
         jmp EXIT
 
@@ -2334,7 +2245,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         mov edx, 0
         div ebx
         pop edx
-        sub ebx, eax
+        sub ecx, eax
         ; sub eax, ecx
         ; mov ecx, eax
         pop ebx
@@ -2355,43 +2266,45 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         pop eax ; popping to reset the stack
 
 
-        ; rcl ebx, 1
-        ; jc skip_1b
-        ; mov ebx, 0bf333333h
-        ; jmp skip1b
-        ; skip_1b:
-        ; rcr ebx, 1
-        ; cmp ebx, 0
-        ; je skip1b
-        ; mov ebx, 3f333333h
-        ; skip1b:
+        cmp ebx, 2
+        jle skip_1b
+        mov ebx, 2
+        jmp skip1b
+        skip_1b:
+        cmp ebx, 0
+        je skip1b
+        cmp ebx, -2
+        jge skip1b
+        mov ebx, -2
+        skip1b:
+        ; invoke dprintToConsole, ebx
 
 
-        ; push ebx
-        ; fstp st(0)
-        ; fild dword ptr [esp]
-        ; fmul real4 ptr [vectorNormalizer]
-        ; fst real4 ptr [realTest2]
-        ; pop ebx
+        push ebx
+        fstp st(0)
+        fild dword ptr [esp]
+        fmul real4 ptr [vectorNormalizer]
+        fst real4 ptr [realTest2]
+        pop ebx
 
-        ; ; rcl ecx, 1
-        ; ; jc skip_1c
-        ; ; mov ecx, 0bf333333h
-        ; ; jmp skip1c
-        ; ; skip_1c:
-        ; ; rcr ecx, 1
-        ; ; cmp ecx, 0
-        ; ; je skip1c
-        ; ; mov ecx, 3f333333h
-        ; ; skip1c:
-        ; ; invoke printToConsole, ecx
+        cmp ecx, 2
+        jle skip_1c
+        mov ecx, 2
+        jmp skip1c
+        skip_1c:
+        cmp ecx, 0
+        je skip1c
+        cmp ecx, -2
+        jge skip1c
+        mov ecx, -2
+        skip1c:
 
-        ; push ecx
-        ; fstp st(0)
-        ; fild dword ptr [esp]
-        ; fmul real4 ptr [vectorNormalizer]
-        ; fst real4 ptr [realTest]
-        ; pop ecx
+        push ecx
+        fstp st(0)
+        fild dword ptr [esp]
+        fmul real4 ptr [vectorNormalizer]
+        fst real4 ptr [realTest]
+        pop ecx
 
 
         pop ebx
@@ -2482,13 +2395,13 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         push offset [cube].N
         call fluidStep ; calling fluidStep to move the fluid
 
-        mov eax, 0
-        mov ax, [systime].wSecond
-        cmp ax, word ptr [second]
-        je skipResetFps
-        mov ax, word ptr [fps]
-        invoke dwtoa, eax, offset Y
-        mov ax, [systime].wSecond ; getting systime to get fps
+        ; mov eax, 0
+        ; mov ax, [systime].wSecond
+        ; cmp ax, word ptr [second]
+        ; je skipResetFps
+        ; mov ax, word ptr [fps]
+        ; invoke dwtoa, eax, offset Y
+        ; mov ax, [systime].wSecond ; getting systime to get fps
 
         mov word ptr [fps], 0
         skipResetFps:
@@ -2546,7 +2459,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
                 add ebx, offset [cube].density
                 fstp st(0)
                 fld real4 ptr [ebx]
-                mov eax, 24e69595h
+                mov eax, 3c23d70ah
                 push eax
                 fsub real4 ptr [esp]
                 pop eax
@@ -2585,12 +2498,16 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 
 
                 pop ebx
+
+                cmp dword ptr [mode], RGBC
+                je RGBCMode
                 mov eax, ebx
                 add ebx, offset [cube].density
                 add eax, offset [cube].densityZ
                 mov eax, real4 ptr [eax]
                 cmp real4 ptr [ebx], eax
                 je skipDrawing
+                RGBCMode:
                 pop ebx
 
                 reDraw:
