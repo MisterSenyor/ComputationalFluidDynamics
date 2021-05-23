@@ -44,34 +44,28 @@ RGBC equ 3
 GRAY equ 4
 
 .DATA
-    ClassName db 'SimpleWinClass',0
+    ClassName db 'WinClass',0
     AppName db 'Fluid Simulator',0
 
-    labelDrawing db 'Drawing...',0
-    labelWaiting db 'Waiting.',0
-
     StaticClassName db 'static',0
+
     V db 'V', 2 dup (' ')
     VVal db '0.00001', 8 dup (?), 0
     Deltat db 'DT', 2 dup (' ')
     DeltatVal db '0.2', 12 dup (?), 0
     D db 'D', 2 dup (' ')
-    DVal db '0.00001', 8 dup (?), 0
+    DVal db '0.00001', 8 dup (?), 0 ; strings to print the fluid param labels
 
     state db WAITING
     moved db 0
-    fps dw 0
-    second dw 0
 
     bcolor COLORREF 00111111h
     tempColor COLORREF 0
 
     cube FluidCube <0.0001, 0.2, 0.00001>
-    ThreeBytes db 10h,20h,30h
-    real2 real4 150.0
-    realTest real4 2.0
-    realTest2 real4 2.0
-    realTest3 real4 0.1
+    DensityToAdd real4 150.0
+    xVectorToAdd real4 2.0
+    yVectorToAdd real4 2.0
     vectorNormalizer real4 0.4
     vectorDivisor real4 1.01
 
@@ -106,9 +100,8 @@ GRAY equ 4
             db "| CHANGE COLOR MODE TO RGB TRANSITIONS ................... 5                                                          |",13,10
             db "|                                                                                                                     |",13,10
             db "|                                                                                                                     |",13,10
-            db "-----------------------------------------------------------------------------------------------------------------------";,13,10
-    message2 db "ddddddddddddddddddddd",13,10
-    lmessage dd 13
+            db "-----------------------------------------------------------------------------------------------------------------------",13,10
+    message2 db "ddddddddddddddddddddd",13,10 ; TODO - REMOVE THIS PART WHEN REMOVING dPrintToConsole
     gridLengthX dd 1
     gridLengthY dd 1
 
@@ -125,7 +118,6 @@ GRAY equ 4
 
 .DATA?
     hInstance HINSTANCE ?
-    hbr HBRUSH ?
     CommandLine LPSTR ?
     hitpoint POINT <>
     lastpoint POINT <>
@@ -134,14 +126,13 @@ GRAY equ 4
     msg MSG <?> ; handle message
     hwnd HWND ? ; handle window procedure
 
-    hwndX HWND ?
-    hwndY HWND ?
-    hwndState HWND ?
+    hwndV HWND ?
+    hwndDT HWND ?
+    hwndD HWND ?
 
-    hdc HDC ?
     ps PAINTSTRUCT <?>
 
-    hPen HPEN ?
+    hPen HPEN ? ; TODO - MAYBE REMOVE BECAUSE IT'S ONLY USED IN COMMENTED GRIDLINE DRAWING PART?
 
 .CODE
 
@@ -1685,51 +1676,35 @@ fluidStep proc
     ret 40
 fluidStep endp
 
-updateXY PROC lParam:LPARAM
-    movzx eax, WORD PTR lParam
-    mov hitpoint.x, eax
-
-    ; invoke dwtoa, eax, offset X
-    ; invoke SetWindowText, hwndX, offset X
-
-    mov eax, lParam
-    shr eax, 16
-    mov hitpoint.y, eax
-
-    ; invoke dwtoa, eax, offset Y
-    ; invoke SetWindowText, hwndY, offset Y
-    ret
-updateXY ENDP
-
 printToConsole proc messageToPrint: dword
     push eax
     push ebx
     push ecx
     push edx
-    ; invoke dwtoa, messageToPrint, offset message
 
-    INVOKE GetStdHandle, STD_OUTPUT_HANDLE
+    INVOKE GetStdHandle, STD_OUTPUT_HANDLE ; getting output handle and saving it in eax
     mov consoleOutHandle, eax
-    mov edx, offset message
+    mov edx, messageToPrint ; message to print
     pushad
     mov eax, 121
     push edx
     mov edx, 0
-    mov ebx, 30
+    mov ebx, 30 ; eax = cols * rows to print on entire console
     mul ebx
     pop edx
 
-    invoke WriteConsoleA, consoleOutHandle, edx, eax, offset bytesWritten, 0
+    invoke WriteConsoleA, consoleOutHandle, edx, eax, offset bytesWritten, 0 ; writing to console
     popad
 
     pop edx
     pop ecx
     pop ebx
-    pop eax
+    pop eax ; blackbox
 
     ret
 printToConsole endp
 
+; TODO - REMOVE THIS PART BEFORE FINAL RELEASE
 dprintToConsole proc messageToPrint: dword
     push eax
     push ebx
@@ -1760,18 +1735,18 @@ drawSquare proc color: COLORREF, deviceContext: HDC, temp: COLORREF, pos: RECT
     push ecx
     push edx
 
-    invoke SetBkColor, deviceContext, color
+    invoke SetBkColor, deviceContext, color ; Getting previous background color into temp and setting current bgcolor to the requested one
     cmp eax, CLR_INVALID
     je fail
-    mov COLORREF ptr [temp], eax
-    invoke ExtTextOut, deviceContext, 0, 0, ETO_OPAQUE, addr pos, " ", 0, 0
-    invoke SetBkColor, deviceContext, COLORREF ptr [temp]
+    mov COLORREF ptr [temp], eax ; saving previous bgcolor
+    invoke ExtTextOut, deviceContext, 0, 0, ETO_OPAQUE, addr pos, " ", 0, 0 ; printing clear text with solid bg to draw the requested square (pos)
+    invoke SetBkColor, deviceContext, COLORREF ptr [temp] ; resetting bgcolor
 
     fail:
     pop edx
     pop ecx
     pop ebx
-    pop eax
+    pop eax ; blackbox
     ret
 drawSquare endp
 
@@ -1786,10 +1761,10 @@ getColor proc
     push ebx
     push ecx
 
-    mov ebx, dword ptr [ebp + 8]
+    mov ebx, dword ptr [ebp + 8] ; moving the density value into ebx (it's only in bl)
     mov eax, 0
 
-    cmp dword ptr [ebp + 12], RGBC
+    cmp dword ptr [ebp + 12], RGBC ; comparing the color mode to each option, and jumping accordingly
     je ON_RGB
 
     cmp dword ptr [ebp + 12], R
@@ -1805,7 +1780,9 @@ getColor proc
     je ON_GRAY
 
     ON_RGB:
-        mov al, bl
+        ; REMINDER - colors are saved as BGR not RGB so it's in reverse order
+        ; getting blue value
+        mov al, bl ; eax = density value
         push eax
         mov eax, 255
         push eax
@@ -1813,10 +1790,12 @@ getColor proc
         fild dword ptr [bPercentage]
         fidiv dword ptr [esp]
         pop eax
-        fimul dword ptr [esp]
-        fist dword ptr [esp]
-        pop eax
-        shl eax, 16
+        fimul dword ptr [esp] ; st(0) = percentage * density / 255
+        fist dword ptr [esp] 
+        pop eax ; storing the value in eax (as int)
+        shl eax, 16 ; saving it as the r value
+
+        ; doing the same but for the green value since it's not a solid color
         mov ecx, 0
         mov cl, bl
         push ecx
@@ -1829,8 +1808,9 @@ getColor proc
         fimul dword ptr [esp]
         fist dword ptr [esp]
         pop ecx
-        mov ah, cl
+        mov ah, cl ; ah is holding the g part
 
+        ; doing the same but for the blue value
         mov ecx, 0
         mov cl, bl
         push ecx
@@ -1843,34 +1823,36 @@ getColor proc
         fimul dword ptr [esp]
         fist dword ptr [esp]
         pop ecx
-        mov al, cl
+        mov al, cl ; al is holding r percentage
+        ; eax now holds the color we want
         jmp END_COLOR
     
     ON_R:
-        mov al, bl
+        mov al, bl ; only red
         jmp END_COLOR
 
     ON_G:
-        mov ah, bl
+        mov ah, bl ; only green
         jmp END_COLOR
         
     ON_B:
         mov al, bl
-        shl eax, 16
+        shl eax, 16 ; only blue
         jmp END_COLOR
 
     ON_GRAY:
+        ; grayscale => R=G=B
         mov al, bl
         shl eax, 16
         mov al, bl
         mov ah, bl
 
     END_COLOR:
-    mov dword ptr [ebp + 12], eax
+    mov dword ptr [ebp + 12], eax ; moving the final color value into the stack to return it
 
     pop ecx
     pop ebx
-    pop eax
+    pop eax ; blackbox
 
     pop ebp
     ret 4
@@ -1916,26 +1898,27 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 
     ON_WM_KEYDOWN:
 
+        ; setting label value for fluid params
         fstp st(0)
         fld real4 ptr [cube].visc
         fst qword ptr floatSave
         mov eax, offset VVal
         invoke FloatToStr, floatSave, eax
-        invoke SetWindowText, hwndX, offset V
+        invoke SetWindowText, hwndV, offset V
 
         fstp st(0)
         fld real4 ptr [cube].deltat
         fst qword ptr floatSave
         mov eax, offset DeltatVal
         invoke FloatToStr, floatSave, eax
-        invoke SetWindowText, hwndY, offset Deltat
+        invoke SetWindowText, hwndDT, offset Deltat
 
         fstp st(0)
         fld real4 ptr [cube].diff
         fst qword ptr floatSave
         mov eax, offset DVal
         invoke FloatToStr, floatSave, eax
-        invoke SetWindowText, hwndState, offset D
+        invoke SetWindowText, hwndD, offset D
 
         mov eax, lParam
         and eax, 111111110000000000000000b
@@ -2165,58 +2148,61 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         jmp EXIT
 
     ON_WM_DESTROY:              ; User closes program
-        invoke PostQuitMessage, NULL
+        invoke PostQuitMessage, NULL ; quitting
         jmp EXIT
 
     ON_WM_CREATE:
         ; Create windows for text
-        finit
+        finit ; init fpu at the start
         
         push ebx
         fstcw word ptr [esp]
         fwait
         mov bx, word ptr [esp]
         and bx, 1111110011111111b
-        or bx,  0001000000000000b
+        or bx,  0001000000000000b ; bit masks on control word to make the fpu use real4 mode and infinity control to respect both -inf and +inf
         mov word ptr [esp], bx
         fldcw word ptr [esp]
         fwait
-        pop ebx ; setting the control word to have the rounding set to round down
+        pop ebx
 
         invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset V, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 20, 20, 150, 25, hWnd, 1, hInstance, NULL
-        mov hwndX, eax
+        mov hwndV, eax
         invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset Deltat, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 20, 50, 150, 25, hWnd, 1, hInstance, NULL
-        mov hwndY, eax
+        mov hwndDT, eax
         invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset StaticClassName, offset D, WS_CHILD or WS_VISIBLE or WS_BORDER or ES_LEFT, 20, 80, 150, 25, hWnd, 1, hInstance, NULL
-        mov hwndState, eax
+        mov hwndD, eax ; creating windows to display the params
 
         ; Create pen for LineTo
+        ; TODO - MAKE SURE IF THIS IS NECESSARY OR NOT
         invoke CreatePen, PS_SOLID, 2, 00000000h
         mov hPen, eax
-        invoke CreateSolidBrush, 00EEEEEEh
-        mov hbr, eax
 
-        invoke printToConsole, ' '
-        ; invoke addDensity, offset [cube].density, [cube].N, 20, 19, real4 ptr [real2]
+        invoke printToConsole, offset message ; printing to console the display
 
         jmp EXIT
 
     ON_WM_LBUTTONDOWN:
-        mov [state], DRAWING
+        mov [state], DRAWING ; mov into state that the mouse is clicked
 
         jmp EXIT
 
     ON_WM_LBUTTONUP:
-        mov [state], WAITING
+        mov [state], WAITING ; move into state that the mouse is no longer clicked
         
         jmp EXIT
 
     ON_WM_MOUSEMOVE:
-        invoke updateXY, lParam                     ; PROC above
+        movzx eax, WORD PTR lParam
+        mov hitpoint.x, eax ; hitpoint x is current mouse x given in the param
+
+        mov eax, lParam
+        shr eax, 16 ; getting the most significant word into ax
+        mov hitpoint.y, eax ; hitpoint y is current mouse y given in the param
 
         cmp [state], DRAWING
         ; invoke InvalidateRect, hWnd, NULL, FALSE    ; https://msdn.microsoft.com/library/dd145002.aspx
-        jne EXIT
+        jne UPDATELASTXY
         mov eax, hitpoint.x
         mov ebx, dword ptr [gridLengthX]
         push edx
@@ -2230,14 +2216,14 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         mov ebx, eax ; y in grid
         pop edx
 
-        invoke addDensity, offset [cube].density, [cube].N, ebx, ecx, real4 ptr [real2]
+        invoke addDensity, offset [cube].density, [cube].N, ebx, ecx, real4 ptr [DensityToAdd] ; adding 150 in density to the mouse location on grid
 
         push ecx
         push ebx
 
         push eax
 
-        push ebx
+        push ebx ; mandatory pushes
 
         mov eax, lastpoint.x
         mov ebx, dword ptr [gridLengthX]
@@ -2245,9 +2231,8 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         mov edx, 0
         div ebx
         pop edx
-        sub ecx, eax
-        ; sub eax, ecx
-        ; mov ecx, eax
+        sub ecx, eax ; ecx is current point minus last point x
+
         pop ebx
         push ecx
         
@@ -2257,9 +2242,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         mov edx, 0
         div ecx
         pop edx
-        sub ebx, eax
-        ; sub eax, ebx
-        ; mov ebx, eax
+        sub ebx, eax ; ebx is current point minus last point y
     
         pop ecx
 
@@ -2276,16 +2259,15 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         cmp ebx, -2
         jge skip1b
         mov ebx, -2
-        skip1b:
-        ; invoke dprintToConsole, ebx
+        skip1b: ; making sure -2 <= ebx <= 2
 
 
         push ebx
         fstp st(0)
         fild dword ptr [esp]
         fmul real4 ptr [vectorNormalizer]
-        fst real4 ptr [realTest2]
-        pop ebx
+        fst real4 ptr [yVectorToAdd]
+        pop ebx ; normalizing the value to fit in for the working values and saving in yVectorToAdd
 
         cmp ecx, 2
         jle skip_1c
@@ -2297,31 +2279,31 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         cmp ecx, -2
         jge skip1c
         mov ecx, -2
-        skip1c:
+        skip1c: ; making sure -2 <= ecx <= 2
 
         push ecx
         fstp st(0)
         fild dword ptr [esp]
         fmul real4 ptr [vectorNormalizer]
-        fst real4 ptr [realTest]
-        pop ecx
+        fst real4 ptr [xVectorToAdd]
+        pop ecx ; normalizing the value to fit in for the working values and saving in xVectorToAdd
 
 
         pop ebx
-        pop ecx
+        pop ecx ; resetting ebx and ecx to their x and y
 
-        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, ebx, ecx, real4 ptr [realTest], real4 ptr [realTest2]
+        invoke addVelocity, offset cube.Vx, offset cube.Vy, cube.N, ebx, ecx, real4 ptr [xVectorToAdd], real4 ptr [yVectorToAdd] ; adding vels in mouse pos on grid
 
-
+        UPDATELASTXY:
         mov eax, hitpoint.x
         mov lastpoint.x, eax
         mov eax, hitpoint.y
-        mov lastpoint.y, eax
+        mov lastpoint.y, eax ; updating last hitpoint and current hitpoint
 
         jmp EXIT
     
     ON_WM_MOVE:
-        mov byte ptr [moved], 1
+        mov byte ptr [moved], 1 ; on screen move, making moved flag positive so it redraws the grid
         
         jmp EXIT
 
@@ -2362,13 +2344,13 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         cmp dword ptr [ebx], 0FFh ; checking if the location ebx is pointing to is 255
         jbe skipResetPercentage
 
-        mov dword ptr [ebx], 0FFh
+        mov dword ptr [ebx], 0FFh ; making the color max 255
         mov eax, dword ptr [repCounter]
         cmp eax, 0
         ja skipResetRepCounter
         mov eax, 3
         skipResetRepCounter:
-        dec eax
+        dec eax ; if the inc color gets to 255, the dec color (which is one location before the inc color) starts to get decreased from 255
     
         mov ebx, 4
         mov edx, 0
@@ -2377,9 +2359,9 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         add ebx, eax ; ebx is pointing to bPercentage + repCounter (repCounter is multiplied by 4 since we're in 32-bit memory)
 
         cmp dword ptr [ebx], 0 ; checking if the location ebx is pointing to is min 0
-        jbe skipResetPercentage
+        jle skipResetPercentage
         
-        dec dword ptr [ebx]
+        dec dword ptr [ebx] ; if dec color is larger than 0, dec it
 
         skipResetPercentage:
 
@@ -2395,18 +2377,6 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         push offset [cube].N
         call fluidStep ; calling fluidStep to move the fluid
 
-        ; mov eax, 0
-        ; mov ax, [systime].wSecond
-        ; cmp ax, word ptr [second]
-        ; je skipResetFps
-        ; mov ax, word ptr [fps]
-        ; invoke dwtoa, eax, offset Y
-        ; mov ax, [systime].wSecond ; getting systime to get fps
-
-        mov word ptr [fps], 0
-        skipResetFps:
-        inc word ptr [fps]
-        mov word ptr [second], ax ; getting fps num
 
         invoke BeginPaint, hWnd, offset ps ; beginning paint to draw
         invoke GetClientRect, hWnd, addr screen
@@ -2500,15 +2470,17 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
                 pop ebx
 
                 cmp dword ptr [mode], RGBC
-                je RGBCMode
+                je RGBCMode ; if mode is rgb mode then refresh anyway
+
                 mov eax, ebx
                 add ebx, offset [cube].density
                 add eax, offset [cube].densityZ
                 mov eax, real4 ptr [eax]
-                cmp real4 ptr [ebx], eax
+                cmp real4 ptr [ebx], eax ; comparing the previous density value of grid pixel to current density value and skipping the draw if they're the same
                 je skipDrawing
+
                 RGBCMode:
-                pop ebx
+                pop ebx ; resetting stack
 
                 reDraw:
                 push ebx
@@ -2519,18 +2491,17 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
                 push ecx
                 call IX
                 pop ebx
-                ; invoke printToConsole, ecx
-                ; invoke printToConsole, edx
-                add ebx, offset [cube].density
-                mov ebx, real4 ptr [ebx]
-                mov eax, ebx
+                add ebx, offset [cube].density ; ebx is pointing to density[x, y]
+
+                mov eax, real4 ptr [ebx]
+
                 push [cube].N
                 push edx
                 push ecx
                 call IX
                 pop ebx
                 add ebx, offset [cube].densityZ
-                mov real4 ptr [ebx], eax
+                mov real4 ptr [ebx], eax ; moving the current density value into the previous one
 
                 pop eax
                 pop ebx
@@ -2546,33 +2517,28 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
                 pop ecx
                 mov [grid].left, eax
                 mov [grid].right, eax
-                add [grid].right, ebx ; y value
+                add [grid].right, ebx ; setting grid to point to the needed location
 
                 push [cube].N
                 push edx
                 push ecx
                 call IX
-                ; invoke printToConsole, ecx
                 pop ebx
-                add ebx, offset [cube].density
+                add ebx, offset [cube].density ; ebx points to cube density value in x y
                 
                 fstp st(0)
                 fld real4 ptr [ebx]
-                push ebx
-                fst real4 ptr [esp]
-                pop eax
                 push eax
                 fist dword ptr [esp]
-                pop ebx
+                pop ebx ; ebx has the integer value of the density
 
                 push dword ptr [mode]
                 push ebx
                 call getColor
-                pop eax
+                pop eax ; getting the color in eax
 
                 mov [bcolor], eax
-                invoke drawSquare, bcolor, ps.hdc, offset tempColor, grid
-                ; invoke printToConsole, eax
+                invoke drawSquare, bcolor, ps.hdc, offset tempColor, grid ; drawing the square in the color according to the density
 
                 jmp skipPop
                 skipDrawing:
@@ -2592,7 +2558,9 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
             cmp ecx, 0
         jne xGridLoop
 
-        mov byte ptr [moved], 0
+        ; END OF GRIDLOOP -----------------------------------------------------------------------
+
+        mov byte ptr [moved], 0 ; making sure to reset the moved flag if it is 1 (so we won't draw unnecessary things)
         mov ecx, [cube].N ; loop counter
 
 
@@ -2633,7 +2601,7 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 
         ;     mov eax, [screen].right
         ;     invoke dwtoa, eax, offset X
-        ;     invoke SetWindowText, hwndY, offset X
+        ;     invoke SetWindowText, hwndDT, offset X
 
         ;     pop ecx
         ;     pop ebx
@@ -2641,9 +2609,10 @@ WndProc PROC hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         ;     dec ecx
         ;     cmp ecx, 0
         ; jne gridLoop
-        invoke EndPaint, hWnd, offset ps
 
-        invoke InvalidateRect, hWnd, NULL, FALSE
+        invoke EndPaint, hWnd, offset ps ; ending paint
+
+        invoke InvalidateRect, hWnd, NULL, FALSE ; refreshing screen
         jmp EXIT
 
     ON_DEFAULT:     ; handle any message that program don't handle
@@ -2666,7 +2635,7 @@ WinMain PROC hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
 
     mov wc.cbSize, SIZEOF WNDCLASSEX        ; size of this structure
     mov wc.style, CS_HREDRAW or CS_VREDRAW  ; style of windows https://msdn.microsoft.com/library/windows/desktop/ff729176.aspx
-    mov wc.lpfnWndProc, OFFSET WndProc      ; andress of window procedure
+    mov wc.lpfnWndProc, OFFSET WndProc      ; address of window procedure
     mov wc.cbClsExtra, NULL
     mov wc.cbWndExtra, NULL
     push hInstance
@@ -2676,7 +2645,8 @@ WinMain PROC hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     mov wc.lpszClassName, OFFSET ClassName
 
     invoke RegisterClassEx, offset wc       ; https://msdn.microsoft.com/library/windows/desktop/ms633587.aspx
-
+    
+    ; creating client window
     ; https://msdn.microsoft.com/library/windows/desktop/ms632680.aspx
     invoke CreateWindowEx, WS_EX_CLIENTEDGE, offset ClassName, offset AppName, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 600, 600, NULL, NULL, hInstance, NULL
     mov hwnd, eax                       ; Store windows handle
@@ -2691,7 +2661,7 @@ WinMain PROC hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
         jle END_LOOP
 
         invoke TranslateMessage, offset msg
-        invoke DispatchMessage, offset msg
+        invoke DispatchMessage, offset msg ; processing message and dispatching it
 
         jmp MESSAGE_LOOP
 
@@ -2706,9 +2676,9 @@ main PROC
 
     invoke GetCommandLine           ; https://msdn.microsoft.com/library/windows/desktop/ms683156.aspx
     mov CommandLine, eax            ; return a pointer to the command-line for current process
-    invoke WinMain, hInstance, NULL, CommandLine, SW_SHOW
+    invoke WinMain, hInstance, NULL, CommandLine, SW_SHOW ; starting main proc
 
-    invoke ExitProcess, eax
+    invoke ExitProcess, eax ; exiting
 main ENDP
 
 END main
